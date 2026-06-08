@@ -4,7 +4,7 @@ tool errors become observations, and the loop terminates correctly."""
 
 from types import SimpleNamespace
 
-from da_verify.agent.react import run_c0
+from da_verify.agent.react import run_c0, run_c1
 from da_verify.agent.tools import dispatch_tool
 from da_verify.llm.client import LLMResponse
 from da_verify.tasks.loader import GoldAnswer, Task
@@ -97,3 +97,21 @@ def test_hit_max_steps_then_final_fallback():
     llm = _ScriptedLLM([_toolcall(), _toolcall(), _final("@x[1]")])
     tr = run_c0(_task(), llm, _FakeSandbox(), max_steps=2)
     assert tr.hit_max_steps and tr.final_response == "@x[1]"
+
+
+# ---- C1 self-verification ------------------------------------------------
+
+def test_c1_runs_verification_round_and_can_revise():
+    # phase 1: tool-call then candidate @x[1]; phase 2 (after self-check): revise to @x[2]
+    llm = _ScriptedLLM([_toolcall(), _final("@x[1]"), _final("@x[2]")])
+    tr = run_c1(_task(), llm, _FakeSandbox(), max_steps=5)
+    assert tr.condition == "c1"
+    assert tr.final_response == "@x[2]"   # the post-verification answer is used
+
+
+def test_c1_skips_verification_when_no_candidate():
+    # phase 1 gives no answer -> nothing to verify -> verification round NOT entered
+    llm = _ScriptedLLM([_final("")])
+    tr = run_c1(_task(), llm, _FakeSandbox(), max_steps=5)
+    assert tr.condition == "c1" and tr.final_response == ""
+    assert llm.n == 1

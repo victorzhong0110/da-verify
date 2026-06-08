@@ -15,7 +15,7 @@ import argparse
 import json
 from pathlib import Path
 
-from da_verify.agent import run_c0
+from da_verify.agent import CONDITIONS
 from da_verify.eval.metrics import TaskScore, aggregate
 from da_verify.eval.scoring import score_response
 from da_verify.llm import LLMClient
@@ -30,6 +30,8 @@ SUBSET = ROOT / "data" / "subsets" / "headline_40.json"
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--n", type=int, default=40)
+    ap.add_argument("--condition", choices=list(CONDITIONS), default="c0",
+                    help="verification condition: c0 (none) | c1 (self-verify)")
     ap.add_argument("--k", type=int, default=1, help="samples per task (pass@k)")
     ap.add_argument("--temp", type=float, default=None, help="default 0 if k==1 else 0.7")
     ap.add_argument("--max-steps", type=int, default=8)
@@ -42,9 +44,10 @@ def main() -> None:
     tasks = tasks_by_id(load_tasks())
     ids = load_subset_ids(SUBSET)[: args.n]
     llm = LLMClient.from_env(temperature=temp)
-    print(f"model={llm.model} temp={temp} n={len(ids)} k={args.k}\n")
+    run_fn = CONDITIONS[args.condition]
+    print(f"model={llm.model} condition={args.condition} temp={temp} n={len(ids)} k={args.k}\n")
 
-    stem = f"eval_{llm.model.replace('/', '_')}_n{len(ids)}_k{args.k}"
+    stem = f"eval_{llm.model.replace('/', '_')}_{args.condition}_n{len(ids)}_k{args.k}"
     out_jsonl = ROOT / "results" / f"{stem}.jsonl"
     out_jsonl.parent.mkdir(parents=True, exist_ok=True)
 
@@ -56,7 +59,7 @@ def main() -> None:
         samples = []
         for s in range(args.k):
             with KernelSandbox(data_csv=t.table_path) as sb:
-                tr = run_c0(t, llm, sb, max_steps=args.max_steps, sample_id=s)
+                tr = run_fn(t, llm, sb, max_steps=args.max_steps, sample_id=s)
             samples.append(score_response(t, tr.final_response))
         n_correct = sum(x.correct for x in samples)
         sc = TaskScore(
@@ -106,7 +109,7 @@ def main() -> None:
     lenient_p1 = sum(r["n_lenient"] for _, r in results.values()) / total_samples if total_samples else 0.0
 
     print("\n" + "=" * 56)
-    print(f"EVAL  model={llm.model}  n={summary['n_tasks']}  k={args.k}  temp={temp}")
+    print(f"EVAL  model={llm.model}  condition={args.condition}  n={summary['n_tasks']}  k={args.k}  temp={temp}")
     print(f"  pass@1 (headline):        {summary['pass@1']:.1%}")
     print(f"  pass@1 (format-forgiving):{lenient_p1:.1%}  "
           f"(+{lenient_p1 - summary['pass@1']:.1%} = single-field @name mismatches, NOT in headline)")

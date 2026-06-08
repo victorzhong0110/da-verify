@@ -122,10 +122,13 @@ capability-vs-reliability split via repeated sampling.
 
 ### C0 over the full 40-task subset (`MiniMax-M2.7`, temp 0)
 
-- **pass@1: 77.5%** — the 10-task 60% was small-sample noise; it moved up on the
-  full set, as flagged.
-- by level: easy **92%** · medium **71%** · hard **69%**
-- format-ok **90%** · candidate **92.5%** (no floor — nearly every task gets an answer)
+- **pass@1: 82.5%** — by level: easy **92%** · medium **79%** · hard **77%**;
+  format-ok **95%** · candidate **97.5%** (no floor).
+- (The 10-task W2 number was 60% — small-sample noise. An earlier full-set run
+  read **77.5%**; the post-review verifier fixes — nested-tag extraction,
+  short-comma lists — re-scored ~2 previously-misjudged tasks, moving it to
+  82.5% on the *same* cached agent outputs. A buggy ruler had mis-stated the
+  baseline by 5 points; this is exactly why the verifier ships with a self-check.)
 
 ### Capability vs reliability (pass@k)
 
@@ -151,6 +154,41 @@ at temp 0 (decision for W5). (2) **resampling ≠ verification** — id=62
 (outlier-definition) and id=75 (sign-flip) were wrong all 5 times; these are
 *systematic* errors resampling can't fix but a re-derive/re-read verification
 step might. That distinguishes flaky headroom from systematic headroom.
+
+---
+
+## Status — W4: C1 self-verification (a clean null at temp 0)
+
+C1 = C0 + one self-verification round (the same agent re-checks its own
+code+answer and may revise once). Conditions share one loop (`_react_loop`);
+only the verification policy differs, so the comparison is controlled. **MCP and
+RAG are deliberately NOT added** — neither is earned with a single backend and
+directly-provided data; they wait for the multi-backend layer.
+
+### C0 vs C1 (`MiniMax-M2.7`, 40 tasks, temp 0)
+
+| | accuracy | 95% CI (Wilson) |
+|---|---|---|
+| C0 (no verification) | 82.5% | 68.0–91.3% |
+| C1 (self-verification) | 82.5% | 68.0–91.3% |
+
+Δ = **0.0%**. C1 fixed 0, broke 0. **McNemar exact p = 1.00** (no discordant
+pairs). C1 marginally improved *format* (format-ok 95%→97.5%, candidate
+97.5%→100%) but changed **no** final-answer correctness.
+
+**Reading (honest).** Pure self-verification gives this weak model **no accuracy
+gain at temp 0** — expected: a deterministic model asked to "check again" mostly
+restates its answer (no new signal). Consistent with the literature that LLMs
+struggle to self-correct reasoning without external feedback. It's a clean null,
+and it **motivates C2**: external/multi-step verification (re-derive by a
+different method, run sanity checks) rather than introspection — the pass@k
+slice showed the failures are *systematic* (sign-flip, outlier-definition),
+which introspection can't see but a re-derive might. *Caveat:* temp 0
+structurally limits self-verification (deterministic re-attempt); whether C1
+helps at temp>0 is open for W5.
+
+Stats: `eval/stats.py` (Wilson + exact McNemar, pure-math); compare two runs with
+`scripts/compare_conditions.py`.
 
 ---
 

@@ -1,10 +1,10 @@
 {
   "n_tasks": 40,
   "samples_per_task": 1,
-  "pass@1": 0.775,
-  "reliability(pass^k)": 0.775,
-  "format_ok_rate": 0.9,
-  "candidate_rate": 0.925,
+  "pass@1": 0.825,
+  "reliability(pass^k)": 0.825,
+  "format_ok_rate": 0.95,
+  "candidate_rate": 0.975,
   "by_level": {
     "easy": {
       "n": 13,
@@ -12,11 +12,11 @@
     },
     "hard": {
       "n": 13,
-      "pass@1": 0.6923076923076923
+      "pass@1": 0.7692307692307693
     },
     "medium": {
       "n": 14,
-      "pass@1": 0.7142857142857143
+      "pass@1": 0.7857142857142857
     }
   }
 }

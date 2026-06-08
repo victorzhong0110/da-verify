@@ -1,0 +1,22 @@
+{
+  "n_tasks": 40,
+  "samples_per_task": 1,
+  "pass@1": 0.825,
+  "reliability(pass^k)": 0.825,
+  "format_ok_rate": 0.975,
+  "candidate_rate": 1.0,
+  "by_level": {
+    "easy": {
+      "n": 13,
+      "pass@1": 0.9230769230769231
+    },
+    "hard": {
+      "n": 13,
+      "pass@1": 0.7692307692307693
+    },
+    "medium": {
+      "n": 14,
+      "pass@1": 0.7857142857142857
+    }
+  }
+}
