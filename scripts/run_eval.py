@@ -33,6 +33,9 @@ def main() -> None:
     ap.add_argument("--k", type=int, default=1, help="samples per task (pass@k)")
     ap.add_argument("--temp", type=float, default=None, help="default 0 if k==1 else 0.7")
     ap.add_argument("--max-steps", type=int, default=8)
+    ap.add_argument("--workers", type=int, default=1,
+                    help="parallel tasks (default 1=sequential). API I/O-bound; "
+                         "raise to speed up the FIRST run. Watch provider rate limits.")
     args = ap.parse_args()
     temp = args.temp if args.temp is not None else (0.0 if args.k == 1 else 0.7)
 
@@ -45,38 +48,68 @@ def main() -> None:
     out_jsonl = ROOT / "results" / f"{stem}.jsonl"
     out_jsonl.parent.mkdir(parents=True, exist_ok=True)
 
+    def run_one(i):
+        """Run all k samples for one task; return (id, TaskScore, jsonl_row).
+        Self-contained so it's safe to run concurrently (own sandbox per sample,
+        atomic cache writes, separate kernel process)."""
+        t = tasks[i]
+        samples = []
+        for s in range(args.k):
+            with KernelSandbox(data_csv=t.table_path) as sb:
+                tr = run_c0(t, llm, sb, max_steps=args.max_steps, sample_id=s)
+            samples.append(score_response(t, tr.final_response))
+        n_correct = sum(x.correct for x in samples)
+        sc = TaskScore(
+            id=t.id, level=t.level, n_samples=args.k, n_correct=n_correct,
+            n_format_ok=sum(x.format_ok for x in samples),
+            n_candidate=sum(x.candidate for x in samples),
+        )
+        row = {
+            "id": t.id, "level": t.level, "n_correct": n_correct, "k": args.k,
+            "n_lenient": sum(x.lenient_correct for x in samples),
+            "pass@1": round(sc.pass_at_1, 3),
+            "samples": [{"correct": x.correct, "lenient_correct": x.lenient_correct,
+                         "format_ok": x.format_ok, "candidate": x.candidate,
+                         "predicted": x.predicted} for x in samples],
+            "gold": {g.name: g.value for g in t.gold},
+        }
+        return i, sc, row
+
+    results: dict[int, tuple] = {}
+    if args.workers > 1:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        with ThreadPoolExecutor(max_workers=args.workers) as ex:
+            futs = {ex.submit(run_one, i): i for i in ids}
+            for fut in as_completed(futs):
+                i, sc, row = fut.result()
+                results[i] = (sc, row)
+                print(f"  id={i:<4} {row['level']:<6} correct={row['n_correct']}/{args.k} (done)")
+    else:
+        for i in ids:
+            _, sc, row = run_one(i)
+            results[i] = (sc, row)
+            print(f"  id={i:<4} {row['level']:<6} correct={row['n_correct']}/{args.k}  pass@1={sc.pass_at_1:.2f}")
+
+    # Write in subset order (deterministic file regardless of completion order).
     scores: list[TaskScore] = []
     with out_jsonl.open("w", encoding="utf-8") as f:
         for i in ids:
-            t = tasks[i]
-            samples = []
-            for s in range(args.k):
-                with KernelSandbox(data_csv=t.table_path) as sb:
-                    tr = run_c0(t, llm, sb, max_steps=args.max_steps, sample_id=s)
-                samples.append(score_response(t, tr.final_response))
-            n_correct = sum(x.correct for x in samples)
-            sc = TaskScore(
-                id=t.id, level=t.level, n_samples=args.k, n_correct=n_correct,
-                n_format_ok=sum(x.format_ok for x in samples),
-                n_candidate=sum(x.candidate for x in samples),
-            )
+            sc, row = results[i]
             scores.append(sc)
-            f.write(json.dumps({
-                "id": t.id, "level": t.level, "n_correct": n_correct, "k": args.k,
-                "pass@1": round(sc.pass_at_1, 3),
-                "samples": [{"correct": x.correct, "format_ok": x.format_ok,
-                             "candidate": x.candidate, "predicted": x.predicted} for x in samples],
-                "gold": {g.name: g.value for g in t.gold},
-            }, ensure_ascii=False) + "\n")
-            print(f"  id={t.id:<4} {t.level:<6} correct={n_correct}/{args.k}  pass@1={sc.pass_at_1:.2f}")
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
     summary = aggregate(scores, k=args.k)
     (ROOT / "results" / f"{stem}_summary.json").write_text(
         json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
 
+    total_samples = len(results) * args.k
+    lenient_p1 = sum(r["n_lenient"] for _, r in results.values()) / total_samples if total_samples else 0.0
+
     print("\n" + "=" * 56)
     print(f"EVAL  model={llm.model}  n={summary['n_tasks']}  k={args.k}  temp={temp}")
-    print(f"  pass@1:               {summary['pass@1']:.1%}")
+    print(f"  pass@1 (headline):        {summary['pass@1']:.1%}")
+    print(f"  pass@1 (format-forgiving):{lenient_p1:.1%}  "
+          f"(+{lenient_p1 - summary['pass@1']:.1%} = single-field @name mismatches, NOT in headline)")
     if args.k > 1:
         print(f"  pass@{args.k}:               {summary[f'pass@{args.k}']:.1%}")
         print(f"  reliability(pass^{args.k}):   {summary['reliability(pass^k)']:.1%}")
