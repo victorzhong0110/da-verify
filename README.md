@@ -52,6 +52,60 @@ python3 scripts/gold_self_check.py   # -> PASS + data/disputes.md
 
 ---
 
+## Status — W2 done: C0 baseline runs end-to-end
+
+A hand-written ReAct agent (Thought→Action→Observation) drives a sandboxed Python
+kernel via function-calling; answers are scored by the W1 verifier.
+
+| Piece | File |
+|---|---|
+| Sandbox kernel (stateful, timeout-interrupt, read-only data) | `src/da_verify/sandbox/kernel.py` |
+| Tools (`run_python` + data introspection) | `src/da_verify/agent/tools.py` |
+| C0 ReAct loop (no self-check, by design) | `src/da_verify/agent/react.py` |
+| LLM client + record-replay cache | `src/da_verify/llm/client.py` |
+| Baseline runner | `scripts/run_baseline.py` |
+
+### C0 result — model `MiniMax-M2.7`, first 10 headline tasks
+
+- accuracy (all_correct): **60%** (6/10)
+- format-miss rate: **10%** (1/10) — id=132 computed the right value (`20`) but
+  emitted the wrong field name → a formatting failure masking a correct answer.
+  This is why format-miss is tracked separately from accuracy.
+- candidate rate: **100%** — no floor effect; the model is weak-but-functional,
+  the right regime to study verification.
+- API errors: 0/10.
+
+The 4 misses are single-step slips, not floor failures: a sign-flip on
+daily-return mean (id=75), an outlier-definition difference (id=62), a
+non-deterministic train/test split with no fixed seed (id=7), and the wrong
+field name (id=132). These are exactly the errors a verification step (C2) could
+plausibly catch — i.e. real headroom for the study.
+
+### Sandbox isolation boundary
+
+**Enforced:** per-cell wall-clock timeout (interrupt; kernel survives), separate
+process, cwd-scoped workdir, source CSV copied in read-only (`0o444`),
+best-effort memory cap (`RLIMIT_AS`; macOS may ignore). **Not enforced here**
+(deferred to a container with `--network none` + cgroups): network isolation,
+filesystem access beyond cwd. The module docstring states this — no false
+sense of security.
+
+### Benchmark ambiguities found (logged, not hidden)
+
+- id=7: accuracy depends on an unfixed train/test split → gold not reproducible.
+- id=62: "outliers" undefined → the without-outliers mean depends on method.
+
+These are task-quality caveats alongside `data/disputes.md`.
+
+### Run it
+
+```bash
+cp .env.example .env   # add a valid OpenAI-compatible key (MiniMax/DeepSeek/…)
+python3 scripts/run_baseline.py --n 10   # cached after first run
+```
+
+---
+
 ## Verifier design — what's earned, and why (defend each in interview)
 
 - **Balanced-bracket extraction** over the official non-greedy `@(\w+)\[(.*?)\]`,
