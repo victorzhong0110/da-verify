@@ -161,3 +161,14 @@ def test_c2_keeps_candidate_when_verifier_answer_unparseable(monkeypatch):
     llm = _ScriptedLLM([_final("@x[1]"), _final("Looks correct to me.")])
     tr = run_c2(_task(), llm, _FakeSandbox(), max_steps=5)
     assert tr.final_response == "@x[1]"   # candidate preserved, not clobbered
+
+
+def test_c2_uses_separate_verifier_model(monkeypatch):
+    # multi-model: solver produces candidate; an independent (stronger) verifier
+    # model recomputes. Each model is used only for its own phase.
+    monkeypatch.setattr(react_mod, "KernelSandbox", _CtxSandbox)
+    solver = _ScriptedLLM([_final("@x[1]")])
+    verifier = _ScriptedLLM([_final("@x[2]")])
+    tr = run_c2(_task(), solver, _FakeSandbox(), max_steps=5, verifier_llm=verifier)
+    assert tr.final_response == "@x[2]"
+    assert solver.n == 1 and verifier.n == 1

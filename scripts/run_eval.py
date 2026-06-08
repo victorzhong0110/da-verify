@@ -38,6 +38,8 @@ def main() -> None:
     ap.add_argument("--workers", type=int, default=1,
                     help="parallel tasks (default 1=sequential). API I/O-bound; "
                          "raise to speed up the FIRST run. Watch provider rate limits.")
+    ap.add_argument("--verifier-model", default=None,
+                    help="C2 only: use a DIFFERENT model for the verifier (e.g. MiniMax-M3)")
     args = ap.parse_args()
     temp = args.temp if args.temp is not None else (0.0 if args.k == 1 else 0.7)
 
@@ -45,9 +47,15 @@ def main() -> None:
     ids = load_subset_ids(SUBSET)[: args.n]
     llm = LLMClient.from_env(temperature=temp)
     run_fn = CONDITIONS[args.condition]
-    print(f"model={llm.model} condition={args.condition} temp={temp} n={len(ids)} k={args.k}\n")
+    verifier_llm = None
+    vtag = ""
+    if args.condition == "c2" and args.verifier_model:
+        verifier_llm = LLMClient.from_env(temperature=temp, model=args.verifier_model)
+        vtag = f"_v{args.verifier_model.replace('/', '_')}"
+    print(f"model={llm.model} condition={args.condition}"
+          f"{' verifier='+verifier_llm.model if verifier_llm else ''} temp={temp} n={len(ids)} k={args.k}\n")
 
-    stem = f"eval_{llm.model.replace('/', '_')}_{args.condition}_n{len(ids)}_k{args.k}"
+    stem = f"eval_{llm.model.replace('/', '_')}_{args.condition}{vtag}_n{len(ids)}_k{args.k}"
     out_jsonl = ROOT / "results" / f"{stem}.jsonl"
     out_jsonl.parent.mkdir(parents=True, exist_ok=True)
 
@@ -59,7 +67,11 @@ def main() -> None:
         samples = []
         for s in range(args.k):
             with KernelSandbox(data_csv=t.table_path) as sb:
-                tr = run_fn(t, llm, sb, max_steps=args.max_steps, sample_id=s)
+                if verifier_llm is not None:
+                    tr = run_fn(t, llm, sb, max_steps=args.max_steps, sample_id=s,
+                                verifier_llm=verifier_llm)
+                else:
+                    tr = run_fn(t, llm, sb, max_steps=args.max_steps, sample_id=s)
             samples.append(score_response(t, tr.final_response))
         n_correct = sum(x.correct for x in samples)
         sc = TaskScore(

@@ -186,13 +186,16 @@ def run_c1(task: Task, llm: LLMClient, sandbox: KernelSandbox, max_steps: int = 
 
 
 def run_c2(task: Task, llm: LLMClient, sandbox: KernelSandbox, max_steps: int = 8,
-           sample_id: int = 0, verify_steps: int = 6) -> RunTrace:
+           sample_id: int = 0, verify_steps: int = 6, verifier_llm: LLMClient | None = None) -> RunTrace:
     """C2: C0, then an INDEPENDENT verifier that recomputes from scratch in its
     own fresh sandbox (external signal = re-execution), and reconciles.
 
     Distinct from C1: not the same agent introspecting, but a skeptical second
     pass that runs its own code. Its independently-derived answer is the output.
+    `verifier_llm` lets the verifier be a DIFFERENT (e.g. stronger) model than the
+    solver — the multi-model verification lever.
     """
+    verifier_llm = verifier_llm or llm
     messages = _init_messages(task)
     final, steps, ntc, hit_max, err = _react_loop(messages, llm, sandbox, max_steps, sample_id)
     if err or not final.strip():
@@ -207,7 +210,7 @@ def run_c2(task: Task, llm: LLMClient, sandbox: KernelSandbox, max_steps: int = 
     # fresh sandbox so the verifier can't be contaminated by the solver's state
     with KernelSandbox(data_csv=task.table_path) as vsb:
         vfinal, vsteps, vntc, vhit, verr = _react_loop(
-            vmsgs, llm, vsb, verify_steps, sample_id)
+            vmsgs, verifier_llm, vsb, verify_steps, sample_id)
 
     # Reconciliation: adopt the verifier's answer ONLY if it actually produced a
     # parseable @name[value]. Never override a real candidate with a non-answer

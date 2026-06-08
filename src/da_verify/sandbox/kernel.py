@@ -187,5 +187,9 @@ class KernelSandbox:
     def __del__(self) -> None:
         # Safety net only: if a caller forgot shutdown()/the `with` block, don't
         # leak the temp workdir. Prefer explicit shutdown — __del__ timing is not
-        # guaranteed. We avoid touching the kernel client here (GC-time hazard).
-        shutil.rmtree(getattr(self, "workdir", ""), ignore_errors=True)
+        # guaranteed. Guard everything: at interpreter shutdown module globals
+        # (shutil) may already be torn down.
+        try:
+            shutil.rmtree(getattr(self, "workdir", ""), ignore_errors=True)
+        except Exception:
+            pass

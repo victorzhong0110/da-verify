@@ -73,7 +73,8 @@ class LLMClient:
         provider = os.environ.get("DA_VERIFY_PROVIDER", "minimax").lower()
         key = os.environ[f"{provider.upper()}_API_KEY"]
         base = os.environ[f"{provider.upper()}_BASE_URL"]
-        model = os.environ.get("DA_VERIFY_MODEL", "MiniMax-M2.7")
+        # optional explicit model override (e.g. a stronger verifier model)
+        model = kw.pop("model", None) or os.environ.get("DA_VERIFY_MODEL", "MiniMax-M2.7")
         return cls(model=model, api_key=key, base_url=base, **kw)
 
     def _cache_key(self, messages: list[dict], tools: list[dict] | None, sample_id: int) -> str:
