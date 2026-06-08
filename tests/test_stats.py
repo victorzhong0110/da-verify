@@ -3,7 +3,12 @@ headline 'verification helps' claim is real, so the math must be pinned."""
 
 import pytest
 
-from da_verify.eval.stats import compare_paired, mcnemar_exact_p, wilson_interval
+from da_verify.eval.stats import (
+    bootstrap_paired_diff,
+    compare_paired,
+    mcnemar_exact_p,
+    wilson_interval,
+)
 
 
 def test_wilson_brackets_the_estimate():
@@ -56,3 +61,25 @@ def test_compare_paired_counts_and_direction():
 def test_compare_paired_requires_aligned_lengths():
     with pytest.raises(ValueError):
         compare_paired([True], [True, False])
+
+
+def test_bootstrap_no_difference_ci_includes_zero():
+    rates = [0.2, 0.4, 0.6, 0.8, 1.0, 0.0, 0.5, 0.5]
+    rc = bootstrap_paired_diff(rates, rates, n_boot=2000, seed=1)
+    assert rc.mean_diff == 0.0
+    assert rc.ci_lo <= 0.0 <= rc.ci_hi
+    assert not rc.significant
+
+
+def test_bootstrap_clear_uniform_gain_is_significant():
+    a = [0.2, 0.2, 0.4, 0.4, 0.6, 0.6, 0.0, 0.0]
+    b = [a_i + 0.4 for a_i in a]  # every task improves by 0.4
+    rc = bootstrap_paired_diff(a, b, n_boot=2000, seed=1)
+    assert rc.mean_diff == pytest.approx(0.4)
+    assert rc.ci_lo > 0.0 and rc.significant
+    assert rc.improved == len(a) and rc.worsened == 0
+
+
+def test_bootstrap_requires_aligned_lengths():
+    with pytest.raises(ValueError):
+        bootstrap_paired_diff([0.5], [0.5, 0.5])

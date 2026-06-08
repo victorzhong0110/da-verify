@@ -20,6 +20,7 @@ items; a t-test assumes continuous independent samples and would be wrong here.
 from __future__ import annotations
 
 import math
+import random
 from dataclasses import dataclass
 
 
@@ -74,6 +75,64 @@ class PairedComparison:
             f"McNemar exact p = {self.mcnemar_p:.4f} ({sig} at α=0.05; "
             f"discordant pairs = {self.a_only + self.b_only})"
         )
+
+
+@dataclass(frozen=True)
+class RateComparison:
+    n_tasks: int
+    mean_a: float
+    mean_b: float
+    mean_diff: float        # mean_b - mean_a
+    ci_lo: float
+    ci_hi: float
+    improved: int           # tasks where B's per-task rate > A's
+    worsened: int           # tasks where B's per-task rate < A's
+
+    @property
+    def significant(self) -> bool:
+        return self.ci_lo > 0 or self.ci_hi < 0  # 95% CI excludes 0
+
+    def summary(self, a_name: str = "A", b_name: str = "B") -> str:
+        sig = "SIGNIFICANT (CI excludes 0)" if self.significant else "n.s. (CI includes 0)"
+        return (
+            f"{a_name} mean per-task rate: {self.mean_a:.1%}\n"
+            f"{b_name} mean per-task rate: {self.mean_b:.1%}\n"
+            f"Δ = {self.mean_diff:+.1%}  (95% bootstrap CI {self.ci_lo:+.1%}..{self.ci_hi:+.1%}) — {sig}\n"
+            f"{b_name} improved {self.improved} tasks, worsened {self.worsened} (of {self.n_tasks})"
+        )
+
+
+def bootstrap_paired_diff(
+    a_rates: list[float], b_rates: list[float], n_boot: int = 10000, seed: int = 0
+) -> RateComparison:
+    """Paired bootstrap 95% CI on mean(b)-mean(a) over matched items.
+
+    For k>1 the per-task unit is a RATE (n_correct/k), not a single binary, so
+    McNemar no longer applies. We resample tasks (the independent unit — avoids
+    pseudo-replication across the correlated samples within a task) and take the
+    2.5/97.5 percentiles of the mean paired difference. Assumption-light.
+    """
+    if len(a_rates) != len(b_rates):
+        raise ValueError("rate lists must be aligned (same tasks, same order)")
+    n = len(a_rates)
+    diffs = [b - a for a, b in zip(a_rates, b_rates)]
+    mean_diff = sum(diffs) / n if n else 0.0
+    rng = random.Random(seed)
+    boots = []
+    for _ in range(n_boot):
+        s = sum(diffs[rng.randrange(n)] for _ in range(n)) / n
+        boots.append(s)
+    boots.sort()
+    lo = boots[int(0.025 * n_boot)]
+    hi = boots[int(0.975 * n_boot)]
+    return RateComparison(
+        n_tasks=n,
+        mean_a=sum(a_rates) / n if n else 0.0,
+        mean_b=sum(b_rates) / n if n else 0.0,
+        mean_diff=mean_diff, ci_lo=lo, ci_hi=hi,
+        improved=sum(1 for d in diffs if d > 0),
+        worsened=sum(1 for d in diffs if d < 0),
+    )
 
 
 def compare_paired(a_correct: list[bool], b_correct: list[bool]) -> PairedComparison:
