@@ -212,10 +212,14 @@ def run_c2(task: Task, llm: LLMClient, sandbox: KernelSandbox, max_steps: int = 
         vfinal, vsteps, vntc, vhit, verr = _react_loop(
             vmsgs, verifier_llm, vsb, verify_steps, sample_id)
 
-    # Reconciliation: adopt the verifier's answer ONLY if it actually produced a
-    # parseable @name[value]. Never override a real candidate with a non-answer
-    # (a verifier that rambled or ran out of steps must not destroy a good answer).
-    use_verifier = bool(vfinal) and bool(extract_answers(vfinal))
+    # Reconciliation: adopt the verifier's answer ONLY if it is COMPLETE — it must
+    # cover EVERY required field. A verifier that re-derives only some fields
+    # (common on multi-part questions, especially across models) must not override
+    # a complete candidate with a partial answer — that destroys correct fields.
+    # (Subsumes the earlier rule: a non-answer covers nothing, so it can't override.)
+    required = {g.name for g in task.gold}
+    verifier_fields = set(extract_answers(vfinal)) if vfinal else set()
+    use_verifier = required.issubset(verifier_fields)
     final_answer = vfinal if use_verifier else final
 
     return RunTrace(

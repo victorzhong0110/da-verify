@@ -163,6 +163,19 @@ def test_c2_keeps_candidate_when_verifier_answer_unparseable(monkeypatch):
     assert tr.final_response == "@x[1]"   # candidate preserved, not clobbered
 
 
+def test_c2_keeps_candidate_when_verifier_misses_a_required_field(monkeypatch):
+    # Regression (the M3-verifier −10% finding): on a multi-part question, a
+    # verifier that emits only SOME required fields must NOT override a complete
+    # candidate with its partial answer.
+    monkeypatch.setattr(react_mod, "KernelSandbox", _CtxSandbox)
+    task = Task(id=1, question="q", concepts=(), constraints="", answer_format="",
+                file_name="t.csv", level="easy",
+                gold=(GoldAnswer("a", "1"), GoldAnswer("b", "2")))
+    llm = _ScriptedLLM([_final("@a[1] @b[2]"), _final("@a[1]")])  # verifier drops b
+    tr = run_c2(task, llm, _FakeSandbox(), max_steps=5)
+    assert tr.final_response == "@a[1] @b[2]"   # complete candidate preserved
+
+
 def test_c2_uses_separate_verifier_model(monkeypatch):
     # multi-model: solver produces candidate; an independent (stronger) verifier
     # model recomputes. Each model is used only for its own phase.

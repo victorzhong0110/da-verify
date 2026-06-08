@@ -236,6 +236,46 @@ checks). The harness and stats are ready — this is now a sample-size + design 
 
 ---
 
+## Status — W6: multi-model verification + two artifacts honest analysis caught
+
+W6 tested the most promising lever — a STRONGER verifier (MiniMax-M3 checking a
+MiniMax-M2.7 solution) — and pushed for power.
+
+### C0 / C1 / C2 (40 tasks, temp 0, k=1)
+
+| condition | accuracy | Δ vs C0 | fixed/broke | McNemar p |
+|---|---|---|---|---|
+| C0 no verification | 82.5% | — | — | — |
+| C1 self-verification | 82.5% | +0.0% | 0/0 | 1.00 |
+| C2 verifier = M2.7 (same) | 85.0% | +2.5% | 1/0 | 1.00 |
+| C2 verifier = M3 (stronger) | 82.5% | +0.0% | 0/0 | 1.00 |
+
+**Honest conclusion:** at n=40 / k=1 / temp 0, no verification variant — self,
+same-model, or a *stronger* model — produced a statistically detectable gain.
+
+**Two artifacts that error analysis caught (the real W6 story):**
+
+1. **temp>0 parallelism collapse.** A temp-0.7, k=5 run with `--workers 3`
+   reported pass@1 17.5% with 82% of samples empty. A serial standalone run of
+   the same task produced a correct answer → the provider was **rate-limiting
+   concurrent requests**. Discarded. Lesson: don't parallelize temp>0 against a
+   rate-limited API without backoff.
+2. **The M3 "−10%" that wasn't.** Naive reconciliation reported M3 verification
+   at 72.5% (−10%, 4 broke). All 4 breaks were multi-part questions where M3 gave
+   *correct values but omitted a required field*, and the override replaced
+   M2.7's complete answer with M3's partial one. Fix: adopt the verifier's answer
+   only if it covers **all** required fields → re-run gave 82.5% (Δ0). "Stronger
+   verifier hurts" was a reconciliation artifact, not a fact.
+
+**What this says:** the bottleneck is **reconciliation policy + multi-part field
+completeness, not verifier strength.** Two reconciliation bugs (override with a
+non-answer; override with a partial answer) were found and fixed by error
+analysis — which is what this project is built to do. A real verification signal,
+if one exists, needs larger n, k>1 diversity (run serially), and verification
+grounded in a programmatic check rather than another LLM's re-derivation.
+
+---
+
 ## Verifier design — what's earned, and why (defend each in interview)
 
 - **Balanced-bracket extraction** over the official non-greedy `@(\w+)\[(.*?)\]`,
