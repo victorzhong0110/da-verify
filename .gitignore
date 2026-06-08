@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+.cache/
+eval_outputs/
+
+# DAEval benchmark data is CC BY-NC 4.0 — NOT vendored here.
+# Fetch it locally with: bash scripts/fetch_data.sh
+data/daeval/
+
+# Our own artifacts (subset ids, dispute log) ARE committed:
+!data/subsets/
+!data/disputes.md

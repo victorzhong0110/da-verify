@@ -1,0 +1,21 @@
+This project evaluates data-analysis agents on the InfiAgent-DABench (DAEval)
+benchmark.
+
+Benchmark: InfiAgent-DABench: Evaluating Agents on Data Analysis Tasks (ICML 2024)
+Authors:   Xueyu Hu et al.
+Code:      https://github.com/InfiAgent/InfiAgent  (examples/DA-Agent)
+Paper:     https://arxiv.org/abs/2401.05507
+Data license: CC BY-NC 4.0 (non-commercial). The DAEval questions, labels, and
+              CSV tables under data/daeval/ are redistributed for non-commercial
+              research use under that license and remain (c) their authors.
+
+data/daeval/OFFICIAL_eval_closed_form.py is the authors' original evaluation
+script, kept verbatim as a faithful reference for comparability. Our verifier
+(src/da_verify/tasks/verifier.py) is an independent re-implementation that is
+byte-compatible with it by default and documents every deliberate divergence.
+
+@misc{hu2024infiagentdabench,
+  title  = {InfiAgent-DABench: Evaluating Agents on Data Analysis Tasks},
+  author = {Xueyu Hu and Ziyu Zhao and Shuang Wei and others},
+  year   = {2024}, eprint = {2401.05507}, archivePrefix = {arXiv}
+}
