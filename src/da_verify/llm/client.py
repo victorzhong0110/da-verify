@@ -76,22 +76,24 @@ class LLMClient:
         model = os.environ.get("DA_VERIFY_MODEL", "MiniMax-M2.7")
         return cls(model=model, api_key=key, base_url=base, **kw)
 
-    def _cache_key(self, messages: list[dict], tools: list[dict] | None) -> str:
-        payload = json.dumps(
-            {
-                "model": self.model,
-                "messages": messages,
-                "tools": tools,
-                "temperature": self.temperature,
-                "max_tokens": self.max_tokens,
-            },
-            sort_keys=True,
-            ensure_ascii=False,
-        )
-        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    def _cache_key(self, messages: list[dict], tools: list[dict] | None, sample_id: int) -> str:
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "tools": tools,
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens,
+        }
+        # sample_id distinguishes the k repeats for pass@k (each must be a fresh
+        # draw, not a cache collapse). Omitted at 0 so the W2 temp=0 cache still hits.
+        if sample_id:
+            payload["sample_id"] = sample_id
+        return hashlib.sha256(
+            json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
+        ).hexdigest()
 
-    def chat(self, messages: list[dict], tools: list[dict] | None = None) -> LLMResponse:
-        key = self._cache_key(messages, tools)
+    def chat(self, messages: list[dict], tools: list[dict] | None = None, sample_id: int = 0) -> LLMResponse:
+        key = self._cache_key(messages, tools, sample_id)
         cache_file = self.cache_dir / f"{key}.json"
         if cache_file.exists():
             data = json.loads(cache_file.read_text(encoding="utf-8"))

@@ -55,8 +55,13 @@ class RunTrace:
     error: str | None = None
 
 
-def run_c0(task, llm: LLMClient, sandbox: KernelSandbox, max_steps: int = 8) -> RunTrace:
-    """Run the C0 loop on one task. `task` is a da_verify.tasks.Task."""
+def run_c0(task, llm: LLMClient, sandbox: KernelSandbox, max_steps: int = 8,
+           sample_id: int = 0) -> RunTrace:
+    """Run the C0 loop on one task. `task` is a da_verify.tasks.Task.
+
+    sample_id labels which of the k pass@k repeats this is, so each repeat is a
+    distinct (cache-separated) draw.
+    """
     messages = [
         {"role": "system", "content": _SYSTEM},
         {"role": "user", "content": _USER.format(
@@ -65,7 +70,7 @@ def run_c0(task, llm: LLMClient, sandbox: KernelSandbox, max_steps: int = 8) -> 
     n_tool_calls = 0
     for step in range(1, max_steps + 1):
         try:
-            resp = llm.chat(messages, tools=TOOL_SCHEMAS)
+            resp = llm.chat(messages, tools=TOOL_SCHEMAS, sample_id=sample_id)
         except Exception as e:  # API/network failure — surface, don't pretend success
             return RunTrace(task.id, "", step, n_tool_calls, messages, error=f"{type(e).__name__}: {e}")
 
@@ -85,7 +90,7 @@ def run_c0(task, llm: LLMClient, sandbox: KernelSandbox, max_steps: int = 8) -> 
     messages.append({"role": "user",
                      "content": "Stop using tools. Give your final answer now in the exact @name[value] format."})
     try:
-        final = llm.chat(messages, tools=None)
+        final = llm.chat(messages, tools=None, sample_id=sample_id)
         return RunTrace(task.id, final.content or "", max_steps, n_tool_calls, messages, hit_max_steps=True)
     except Exception as e:
         return RunTrace(task.id, "", max_steps, n_tool_calls, messages, hit_max_steps=True,

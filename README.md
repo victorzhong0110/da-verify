@@ -81,6 +81,15 @@ non-deterministic train/test split with no fixed seed (id=7), and the wrong
 field name (id=132). These are exactly the errors a verification step (C2) could
 plausibly catch — i.e. real headroom for the study.
 
+> **Comparability caveat.** Do not read this 60% against published
+> leaderboards (e.g. InfiAgent reports GPT-4 ≈ 60% ABQ). Those numbers use a
+> *different* harness, add a GPT-3.5 reformat step we deliberately omit (so we
+> eat the format penalty they don't), a different model, and the full task set.
+> External numbers are only a loose "not catastrophically broken" sanity check.
+> **The only authoritative comparison is internal: our C0 vs C2** — same model,
+> harness, tasks, and grader. The study is controlled precisely so it doesn't
+> depend on cross-setup comparability.
+
 ### Sandbox isolation boundary
 
 **Enforced:** per-cell wall-clock timeout (interrupt; kernel survives), separate
@@ -103,6 +112,28 @@ These are task-quality caveats alongside `data/disputes.md`.
 cp .env.example .env   # add a valid OpenAI-compatible key (MiniMax/DeepSeek/…)
 python3 scripts/run_baseline.py --n 10   # cached after first run
 ```
+
+---
+
+## Status — W3: stable full-set eval + pass@k harness
+
+W2's baseline was 10 tasks (noisy). W3 runs the full 40-task subset and adds a
+capability-vs-reliability split via repeated sampling.
+
+### C0 over the full 40-task subset (`MiniMax-M2.7`, temp 0)
+
+- **pass@1: 77.5%** — the 10-task 60% was small-sample noise; it moved up on the
+  full set, as flagged.
+- by level: easy **92%** · medium **71%** · hard **69%**
+- format-ok **90%** · candidate **92.5%** (no floor — nearly every task gets an answer)
+
+### Capability vs reliability (pass@k)
+
+`src/da_verify/eval/metrics.py` reports three numbers from k repeated samples:
+pass@1 (accuracy), **pass@k** (≥1 of k correct — capability; unbiased Chen-2021
+estimator), **pass^k** (all k correct — reliability). Verification is expected to
+move reliability most, so the axis must be measured, not assumed. Slice run:
+`python3 scripts/run_eval.py --n 8 --k 5 --temp 0.7`.
 
 ---
 
