@@ -192,6 +192,50 @@ Stats: `eval/stats.py` (Wilson + exact McNemar, pure-math); compare two runs wit
 
 ---
 
+## Status — W5: C2 external verification, and the C0/C1/C2 picture
+
+C2 = C0, then an INDEPENDENT verifier (a fresh skeptical agent in its own sandbox)
+recomputes the answer from scratch and reconciles. Unlike C1's introspection, the
+external re-execution is a genuine new signal.
+
+### C0 / C1 / C2 (`MiniMax-M2.7`, 40 tasks, temp 0)
+
+| condition | accuracy | 95% CI (Wilson) | vs C0 | fixed / broke | McNemar p |
+|---|---|---|---|---|---|
+| C0 no verification | 82.5% | 68.0–91.3% | — | — | — |
+| C1 self-verification | 82.5% | 68.0–91.3% | +0.0% | 0 / 0 | 1.00 |
+| C2 external verification | **85.0%** | 70.9–92.9% | **+2.5%** | 1 / 0 | 1.00 |
+
+**Reading (honest — this is the result, not a disappointment).**
+- **C1 (introspection) moved nothing.** A deterministic model asked to "check
+  again" restates its answer — no new signal (consistent with the literature on
+  LLM self-correction).
+- **C2 (external re-derivation) is directionally better** and, unlike C1,
+  actually moves answers: it fixed id=7, broke none.
+- **But it is not statistically significant.** +2.5% = 1 task in 40, a single
+  discordant pair, McNemar p=1.00. At n=40 / k=1 the study is **underpowered** to
+  detect a small effect — and the one fix (id=7) sits on a task whose gold is
+  non-reproducible (unfixed train/test split), so even that edge is shaky.
+
+The defensible claim is narrow and true: *on a weak model, temp 0, n=40 —
+self-verification gives no gain; external re-derivation is directionally positive
+but underpowered.* This extends the ArkNarrator thesis: not all harness helps —
+**same-model verification alone is insufficient; you need a stronger or
+externally-grounded checker.**
+
+**Bug found + fixed mid-experiment:** the first C2 run *broke* id=587 — the
+verifier produced no parseable answer and the naive reconciliation (`vfinal or
+final`) overrode a correct candidate with a non-answer. Fixed: adopt the
+verifier's answer only if it parses; otherwise keep the candidate
+(`tests/test_agent.py` pins it).
+
+**Path to a powered result (W6+):** more tasks (full DAEval) + k>1 samples +
+temp>0 (the pass@k slice showed capable-but-unreliable behavior there) + a
+verifier stronger than or grounded beyond the solver (multi-model / programmatic
+checks). The harness and stats are ready — this is now a sample-size + design lever.
+
+---
+
 ## Verifier design — what's earned, and why (defend each in interview)
 
 - **Balanced-bracket extraction** over the official non-greedy `@(\w+)\[(.*?)\]`,

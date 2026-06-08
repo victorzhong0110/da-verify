@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from ..llm.client import LLMClient
 from ..sandbox import KernelSandbox
 from ..tasks.loader import Task
+from ..tasks.verifier import extract_answers
 from .tools import TOOL_SCHEMAS, dispatch_tool
 
 _SYSTEM = """You are a careful data analyst. You answer questions about a dataset \
@@ -58,6 +59,39 @@ _VERIFY = """Before you finalize, double-check your own work:
 - Does the answer use the EXACT required @answer_name[value] format and field name?
 
 If you find a mistake, correct it. Otherwise restate the same final answer in the exact format."""
+
+# C2 external verification: a FRESH, skeptical analyst that independently recomputes
+# (in its own sandbox, from raw data) rather than introspecting. The W4 null showed
+# self-critique adds no signal; an independent re-derivation by executing code is the
+# external signal. It is told the candidate ONLY so it can reconcile — and told not to
+# trust it.
+_VERIFIER_SYSTEM = """You are an INDEPENDENT verifier — a skeptical second analyst.
+You are given a question about a dataset and a CANDIDATE answer produced by someone
+else. Do NOT assume the candidate is correct.
+
+Your job: recompute the answer yourself, from scratch, from the raw data \
+(load it fresh with pd.read_csv(CSV_PATH)). Prefer a DIFFERENT method than the most \
+obvious one, and run sanity checks (row counts, null handling, value ranges). Then \
+decide the correct value.
+
+Environment: stateful sandbox, pandas as pd, numpy as np, data at CSV_PATH; use the \
+tools to run code. Finish with the CORRECT answer in the exact required \
+@answer_name[value] format — your INDEPENDENTLY verified value, whether or not it \
+matches the candidate."""
+
+_VERIFIER_USER = """Question:
+{question}
+
+Constraints:
+{constraints}
+
+Required answer format:
+{fmt}
+
+CANDIDATE answer (verify independently — do NOT assume it is correct):
+{candidate}
+
+Recompute from the raw data yourself, cross-check, then give the correct answer in the exact format."""
 
 
 @dataclass
@@ -148,4 +182,46 @@ def run_c1(task: Task, llm: LLMClient, sandbox: KernelSandbox, max_steps: int = 
         hit_max or hit_max2,
         err2,
         condition="c1",
+    )
+
+
+def run_c2(task: Task, llm: LLMClient, sandbox: KernelSandbox, max_steps: int = 8,
+           sample_id: int = 0, verify_steps: int = 6) -> RunTrace:
+    """C2: C0, then an INDEPENDENT verifier that recomputes from scratch in its
+    own fresh sandbox (external signal = re-execution), and reconciles.
+
+    Distinct from C1: not the same agent introspecting, but a skeptical second
+    pass that runs its own code. Its independently-derived answer is the output.
+    """
+    messages = _init_messages(task)
+    final, steps, ntc, hit_max, err = _react_loop(messages, llm, sandbox, max_steps, sample_id)
+    if err or not final.strip():
+        return RunTrace(task.id, final, steps, ntc, messages, hit_max, err, condition="c2")
+
+    vmsgs = [
+        {"role": "system", "content": _VERIFIER_SYSTEM},
+        {"role": "user", "content": _VERIFIER_USER.format(
+            question=task.question, constraints=task.constraints,
+            fmt=task.answer_format, candidate=final)},
+    ]
+    # fresh sandbox so the verifier can't be contaminated by the solver's state
+    with KernelSandbox(data_csv=task.table_path) as vsb:
+        vfinal, vsteps, vntc, vhit, verr = _react_loop(
+            vmsgs, llm, vsb, verify_steps, sample_id)
+
+    # Reconciliation: adopt the verifier's answer ONLY if it actually produced a
+    # parseable @name[value]. Never override a real candidate with a non-answer
+    # (a verifier that rambled or ran out of steps must not destroy a good answer).
+    use_verifier = bool(vfinal) and bool(extract_answers(vfinal))
+    final_answer = vfinal if use_verifier else final
+
+    return RunTrace(
+        task.id,
+        final_answer,
+        steps + vsteps,
+        ntc + vntc,
+        messages + vmsgs,
+        hit_max or vhit,
+        verr,
+        condition="c2",
     )

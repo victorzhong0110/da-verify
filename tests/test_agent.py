@@ -4,7 +4,8 @@ tool errors become observations, and the loop terminates correctly."""
 
 from types import SimpleNamespace
 
-from da_verify.agent.react import run_c0, run_c1
+import da_verify.agent.react as react_mod
+from da_verify.agent.react import run_c0, run_c1, run_c2
 from da_verify.agent.tools import dispatch_tool
 from da_verify.llm.client import LLMResponse
 from da_verify.tasks.loader import GoldAnswer, Task
@@ -115,3 +116,48 @@ def test_c1_skips_verification_when_no_candidate():
     tr = run_c1(_task(), llm, _FakeSandbox(), max_steps=5)
     assert tr.condition == "c1" and tr.final_response == ""
     assert llm.n == 1
+
+
+# ---- C2 independent external verification ---------------------------------
+
+class _CtxSandbox:
+    """A fake KernelSandbox usable as a context manager (for C2's verifier sandbox)."""
+
+    def __init__(self, *a, **k):
+        self.calls = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def execute(self, code):
+        self.calls.append(code)
+        return SimpleNamespace(as_observation=lambda: f"ran:{code[:20]}")
+
+
+def test_c2_independent_verifier_produces_answer(monkeypatch):
+    # patch the verifier's internal sandbox so the test needs no real kernel
+    monkeypatch.setattr(react_mod, "KernelSandbox", _CtxSandbox)
+    # phase 1 (solver): tool-call -> candidate @x[1]; phase 2 (verifier): recompute -> @x[2]
+    llm = _ScriptedLLM([_toolcall(), _final("@x[1]"), _final("@x[2]")])
+    tr = run_c2(_task(), llm, _FakeSandbox(), max_steps=5)
+    assert tr.condition == "c2"
+    assert tr.final_response == "@x[2]"   # verifier's independent answer is the output
+
+
+def test_c2_falls_back_to_candidate_when_verifier_empty(monkeypatch):
+    monkeypatch.setattr(react_mod, "KernelSandbox", _CtxSandbox)
+    llm = _ScriptedLLM([_final("@x[1]"), _final("")])  # verifier yields nothing
+    tr = run_c2(_task(), llm, _FakeSandbox(), max_steps=5)
+    assert tr.final_response == "@x[1]"   # fall back to the candidate
+
+
+def test_c2_keeps_candidate_when_verifier_answer_unparseable(monkeypatch):
+    # Regression: a non-empty verifier reply with NO @name[value] must NOT
+    # override a valid candidate (the id=587 break we found and fixed).
+    monkeypatch.setattr(react_mod, "KernelSandbox", _CtxSandbox)
+    llm = _ScriptedLLM([_final("@x[1]"), _final("Looks correct to me.")])
+    tr = run_c2(_task(), llm, _FakeSandbox(), max_steps=5)
+    assert tr.final_response == "@x[1]"   # candidate preserved, not clobbered
