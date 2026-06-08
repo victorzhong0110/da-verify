@@ -131,9 +131,26 @@ capability-vs-reliability split via repeated sampling.
 
 `src/da_verify/eval/metrics.py` reports three numbers from k repeated samples:
 pass@1 (accuracy), **pass@k** (≥1 of k correct — capability; unbiased Chen-2021
-estimator), **pass^k** (all k correct — reliability). Verification is expected to
-move reliability most, so the axis must be measured, not assumed. Slice run:
-`python3 scripts/run_eval.py --n 8 --k 5 --temp 0.7`.
+estimator), **pass^k** (all k correct — reliability).
+
+Slice (8 tasks × 5 samples, temp 0.7):
+
+| metric | value | reading |
+|---|---|---|
+| pass@1 | 45% | one shot |
+| pass@5 | 75% | capability (≥1 of 5) |
+| pass^5 | 12.5% | reliability (all 5) — 1/8 tasks |
+
+The **45%→75% gap** is the study's target: the model is *capable but
+unreliable*. Verification's job is to convert "sometimes right" into "reliably
+right," and `pass^5 = 12.5%` shows that axis is wide open.
+
+Two findings logged: (1) **temperature hurts format** — format-ok dropped 90%→50%
+and candidate 92.5%→50% from temp 0→0.7, so the headline C0/C2 study likely runs
+at temp 0 (decision for W5). (2) **resampling ≠ verification** — id=62
+(outlier-definition) and id=75 (sign-flip) were wrong all 5 times; these are
+*systematic* errors resampling can't fix but a re-derive/re-read verification
+step might. That distinguishes flaky headroom from systematic headroom.
 
 ---
 
