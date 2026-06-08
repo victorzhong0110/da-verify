@@ -107,7 +107,10 @@ class LLMClient:
             max_tokens=self.max_tokens,
         )
         norm = self._normalise(resp)
-        cache_file.write_text(
+        # Atomic write (temp + rename): a process killed mid-write must not leave a
+        # half-written cache file that the next run reads as corrupt JSON.
+        tmp = cache_file.with_suffix(".tmp")
+        tmp.write_text(
             json.dumps(
                 {
                     "content": norm.content,
@@ -120,10 +123,14 @@ class LLMClient:
             ),
             encoding="utf-8",
         )
+        tmp.replace(cache_file)
         return norm
 
     @staticmethod
     def _normalise(resp) -> LLMResponse:
+        if not getattr(resp, "choices", None):
+            # rate-limit / content-filter can return empty choices -> surface clearly
+            raise ValueError("LLM returned no choices")
         choice = resp.choices[0]
         msg = choice.message
         tool_calls: list[dict] = []

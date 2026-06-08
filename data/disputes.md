@@ -12,11 +12,11 @@ Gold rendered as `@name[value]` then re-extracted+compared fails — i.e. the be
 | 273 | outlier_list | malformed: unbalanced bracket(s) in gold | correlation_coefficient='0.922'; outlier_count='0'; outlier_list='[' |
 | 554 | median_ht_m | degenerate: non-finite gold (nan/inf never equals itself in IEEE-754) | median_ht_m='nan' |
 
-## B. Free-text categorical gold — auto-grading hazard (81/257)
+## B. Free-text categorical gold — auto-grading hazard (83/257)
 
 These have categorical gold whose vocabulary is inconsistent across the set ('no' / 'No' / 'False' / 'not normally distributed'). casefold+strip fixes case/space but NOT semantics, so a correct model can be marked wrong. **De-prioritised in the headline-40** (verifiability-first); used only in a separate, explicitly-flagged categorical analysis.
 
-Affected ids (81): [10, 11, 19, 25, 33, 34, 56, 59, 66, 72, 109, 114, 116, 117, 118, 123, 124, 130, 139, 140, 142, 177, 220, 244, 252, 268, 269, 273, 298, 300, 304, 324, 326, 337, 338, 350, 352, 355, 359, 360, 408, 410, 413, 415, 419, 423, 424, 428, 429, 431, 449, 452, 465, 466, 473, 492, 510, 529, 530, 543, 550, 552, 572, 575, 593, 602, 644, 647, 652, 658, 667, 668, 684, 685, 729, 733, 734, 736, 738, 741, 760]
+Affected ids (83): [10, 11, 19, 25, 33, 34, 56, 59, 66, 72, 109, 114, 116, 117, 118, 123, 124, 130, 139, 140, 142, 177, 220, 244, 252, 268, 269, 273, 298, 300, 304, 324, 326, 337, 338, 350, 352, 355, 359, 360, 408, 410, 413, 415, 419, 423, 424, 428, 429, 431, 449, 450, 451, 452, 465, 466, 473, 492, 510, 529, 530, 543, 550, 552, 572, 575, 593, 602, 644, 647, 652, 658, 667, 668, 684, 685, 729, 733, 734, 736, 738, 741, 760]
 
 
 ## C. Duplicate answer-field names (1)

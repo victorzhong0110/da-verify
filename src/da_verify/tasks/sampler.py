@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import random
+import warnings
 from collections import defaultdict
 from pathlib import Path
 
@@ -80,6 +81,12 @@ def stratified_sample(
             pool = clean + noisy  # clean first, noisy as fallback
         chosen.extend(pool[:want])
 
+    if len(chosen) < n:
+        warnings.warn(
+            f"stratified_sample: requested {n} tasks but only {len(chosen)} available "
+            f"(pool exhausted) — returning fewer.",
+            stacklevel=2,
+        )
     return sorted(chosen, key=lambda t: t.id)
 
 

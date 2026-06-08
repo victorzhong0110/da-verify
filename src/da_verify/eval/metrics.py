@@ -28,6 +28,8 @@ def pass_at_k(n: int, c: int, k: int) -> float:
     """Unbiased pass@k from n samples of which c are correct (Chen et al. 2021)."""
     if k > n:
         raise ValueError(f"pass@{k} needs n>={k} samples, got n={n}")
+    if c > n:
+        raise ValueError(f"c={c} correct cannot exceed n={n} samples")
     if c <= 0:
         return 0.0
     if n - c < k:
@@ -70,9 +72,11 @@ def aggregate(scores: list[TaskScore], k: int) -> dict:
     def _mean(f):
         return sum(f(s) for s in scores) / n
 
+    ns = {s.n_samples for s in scores}
     out = {
         "n_tasks": n,
-        "samples_per_task": scores[0].n_samples,
+        # report the set (not a lie) if tasks ended up with different sample counts
+        "samples_per_task": scores[0].n_samples if len(ns) == 1 else sorted(ns),
         "pass@1": _mean(lambda s: s.pass_at_1),
         f"pass@{k}": _mean(lambda s: s.pass_at(k)),
         "reliability(pass^k)": _mean(lambda s: s.is_reliable),

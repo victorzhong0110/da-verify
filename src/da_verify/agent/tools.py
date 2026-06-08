@@ -77,7 +77,11 @@ def dispatch_tool(name: str, args: dict, sandbox: KernelSandbox) -> str:
             return "error: run_python called with empty 'code'."
         return sandbox.execute(code).as_observation()
     if name == "head":
-        n = int((args or {}).get("n", 5) or 5)
+        try:
+            n = int((args or {}).get("n") or 5)
+        except (TypeError, ValueError):
+            n = 5
+        n = max(1, min(n, 100))  # clamp: no negative/huge head() from a bad arg
         return sandbox.execute(
             f"import pandas as pd\nprint(pd.read_csv(CSV_PATH).head({n}).to_string())"
         ).as_observation()

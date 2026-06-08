@@ -21,11 +21,11 @@ import json
 from pathlib import Path
 
 from da_verify.agent import run_c0
+from da_verify.eval.scoring import score_response
 from da_verify.llm import LLMClient
 from da_verify.sandbox import KernelSandbox
 from da_verify.tasks.loader import load_tasks, tasks_by_id
 from da_verify.tasks.sampler import load_subset_ids
-from da_verify.tasks.verifier import extract_answers, verify_response
 
 ROOT = Path(__file__).resolve().parents[1]
 SUBSET = ROOT / "data" / "subsets" / "headline_40.json"
@@ -48,36 +48,28 @@ def main() -> None:
     with OUT.open("w", encoding="utf-8") as f:
         for i in ids:
             t = tasks[i]
-            sb = KernelSandbox(data_csv=t.table_path)
-            try:
-                sb.start()
+            with KernelSandbox(data_csv=t.table_path) as sb:
                 trace = run_c0(t, llm, sb, max_steps=args.max_steps)
-            finally:
-                sb.shutdown()
 
-            vr = verify_response(t.id, trace.final_response, [(g.name, g.value) for g in t.gold])
-            extracted = extract_answers(trace.final_response)
-            required = [g.name for g in t.gold]
-            produced_candidate = len(extracted) > 0
-            format_ok = all(r in extracted for r in required)
-
+            sc = score_response(t, trace.final_response)
+            gold = {g.name: g.value for g in t.gold}
             row = {
                 "id": t.id, "level": t.level, "csv": t.file_name,
-                "all_correct": vr.all_correct,
-                "n_correct_fields": vr.n_correct_fields, "n_fields": len(required),
-                "produced_candidate": produced_candidate,
-                "format_ok": format_ok,
+                "all_correct": sc.correct,
+                "n_correct_fields": sc.n_correct_fields, "n_fields": sc.n_fields,
+                "produced_candidate": sc.candidate,
+                "format_ok": sc.format_ok,
                 "steps": trace.steps, "tool_calls": trace.tool_calls,
                 "hit_max_steps": trace.hit_max_steps, "error": trace.error,
-                "predicted": vr.predicted, "gold": vr.gold,
+                "predicted": sc.predicted, "gold": gold,
                 "final_response": trace.final_response[:500],
             }
             rows.append(row)
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
-            mark = "✓" if vr.all_correct else ("·" if format_ok else "✗fmt")
+            mark = "✓" if sc.correct else ("·" if sc.format_ok else "✗fmt")
             err = f"  ERR={row['error']}" if row["error"] else ""
             print(f"  [{mark:4}] id={t.id:<4} {t.level:<6} steps={trace.steps} "
-                  f"pred={vr.predicted} gold={vr.gold}{err}")
+                  f"pred={sc.predicted} gold={gold}{err}")
 
     n = len(rows)
     acc = sum(r["all_correct"] for r in rows) / n

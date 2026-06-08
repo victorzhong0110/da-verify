@@ -180,6 +180,17 @@ See `data/disputes.md`: 2 malformed/degenerate gold answers (excluded), 81
 tasks with semantically-inconsistent categorical gold (de-prioritised in the
 headline subset), 1 duplicate-field task, 3 empty-gold tasks.
 
+## Tests & quality
+
+`python3 -m pytest tests/ -q` → **59 tests**. Covers the load-bearing pieces
+(verifier extraction/comparison/multi-part, pass@k estimator) and the modules
+with subtle logic (sandbox timeout-drain + read-only, LLM cache-key semantics,
+ReAct loop termination + tool-error handling, loader join contracts, sampler
+determinism). A two-reviewer pass (Python + architecture) drove fixes to the
+verifier (nested-tag extraction, short-comma lists, dict-literal gold), the
+pass@k estimator (reject c>n), tool-error propagation, and atomic cache writes.
+`requirements.txt` pins deps so a fresh clone runs.
+
 ## Data / attribution
 
 DAEval is InfiAgent-DABench (ICML 2024), CC BY-NC 4.0 — see `NOTICE`.

@@ -17,26 +17,14 @@ from pathlib import Path
 
 from da_verify.agent import run_c0
 from da_verify.eval.metrics import TaskScore, aggregate
+from da_verify.eval.scoring import score_response
 from da_verify.llm import LLMClient
 from da_verify.sandbox import KernelSandbox
 from da_verify.tasks.loader import load_tasks, tasks_by_id
 from da_verify.tasks.sampler import load_subset_ids
-from da_verify.tasks.verifier import extract_answers, verify_response
 
 ROOT = Path(__file__).resolve().parents[1]
 SUBSET = ROOT / "data" / "subsets" / "headline_40.json"
-
-
-def score_sample(task, response: str):
-    vr = verify_response(task.id, response, [(g.name, g.value) for g in task.gold])
-    extracted = extract_answers(response)
-    required = [g.name for g in task.gold]
-    return {
-        "correct": vr.all_correct,
-        "format_ok": all(r in extracted for r in required),
-        "candidate": len(extracted) > 0,
-        "predicted": vr.predicted,
-    }
 
 
 def main() -> None:
@@ -63,23 +51,21 @@ def main() -> None:
             t = tasks[i]
             samples = []
             for s in range(args.k):
-                sb = KernelSandbox(data_csv=t.table_path)
-                try:
-                    sb.start()
+                with KernelSandbox(data_csv=t.table_path) as sb:
                     tr = run_c0(t, llm, sb, max_steps=args.max_steps, sample_id=s)
-                finally:
-                    sb.shutdown()
-                samples.append(score_sample(t, tr.final_response))
-            n_correct = sum(x["correct"] for x in samples)
+                samples.append(score_response(t, tr.final_response))
+            n_correct = sum(x.correct for x in samples)
             sc = TaskScore(
                 id=t.id, level=t.level, n_samples=args.k, n_correct=n_correct,
-                n_format_ok=sum(x["format_ok"] for x in samples),
-                n_candidate=sum(x["candidate"] for x in samples),
+                n_format_ok=sum(x.format_ok for x in samples),
+                n_candidate=sum(x.candidate for x in samples),
             )
             scores.append(sc)
             f.write(json.dumps({
                 "id": t.id, "level": t.level, "n_correct": n_correct, "k": args.k,
-                "pass@1": round(sc.pass_at_1, 3), "samples": samples,
+                "pass@1": round(sc.pass_at_1, 3),
+                "samples": [{"correct": x.correct, "format_ok": x.format_ok,
+                             "candidate": x.candidate, "predicted": x.predicted} for x in samples],
                 "gold": {g.name: g.value for g in t.gold},
             }, ensure_ascii=False) + "\n")
             print(f"  id={t.id:<4} {t.level:<6} correct={n_correct}/{args.k}  pass@1={sc.pass_at_1:.2f}")

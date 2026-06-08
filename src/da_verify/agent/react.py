@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 
 from ..llm.client import LLMClient
 from ..sandbox import KernelSandbox
+from ..tasks.loader import Task
 from .tools import TOOL_SCHEMAS, dispatch_tool
 
 _SYSTEM = """You are a careful data analyst. You answer questions about a dataset \
@@ -55,7 +56,7 @@ class RunTrace:
     error: str | None = None
 
 
-def run_c0(task, llm: LLMClient, sandbox: KernelSandbox, max_steps: int = 8,
+def run_c0(task: Task, llm: LLMClient, sandbox: KernelSandbox, max_steps: int = 8,
            sample_id: int = 0) -> RunTrace:
     """Run the C0 loop on one task. `task` is a da_verify.tasks.Task.
 
@@ -83,7 +84,12 @@ def run_c0(task, llm: LLMClient, sandbox: KernelSandbox, max_steps: int = 8,
         for tc in resp.tool_calls:
             n_tool_calls += 1
             args = tc["arguments"] if tc["arguments"] is not None else {}
-            obs = dispatch_tool(tc["name"], args, sandbox)
+            try:
+                obs = dispatch_tool(tc["name"], args, sandbox)
+            except Exception as e:
+                # A tool failure must become an observation the model can react to,
+                # never an exception that crashes the whole eval run.
+                obs = f"error: tool '{tc['name']}' failed: {type(e).__name__}: {e}"
             messages.append({"role": "tool", "tool_call_id": tc["id"], "content": obs})
 
     # Ran out of steps. Make one last non-tool request for a final answer.

@@ -1,0 +1,7 @@
+# Runtime + test deps for da-verify. Install: pip install -r requirements.txt
+# (Python 3.11+; a fresh venv recommended.)
+openai>=1.40            # OpenAI-compatible client (MiniMax / DeepSeek / ...)
+jupyter_client>=8.0     # sandbox kernel
+ipykernel>=6.0          # the kernel the sandbox launches
+pandas>=2.0             # data analysis in-sandbox
+pytest>=8.0             # tests

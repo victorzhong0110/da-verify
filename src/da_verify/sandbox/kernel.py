@@ -180,4 +180,12 @@ class KernelSandbox:
             if self._km is not None:
                 self._km.shutdown_kernel(now=True)
         finally:
+            self._km = None
+            self._kc = None
             shutil.rmtree(self.workdir, ignore_errors=True)
+
+    def __del__(self) -> None:
+        # Safety net only: if a caller forgot shutdown()/the `with` block, don't
+        # leak the temp workdir. Prefer explicit shutdown — __del__ timing is not
+        # guaranteed. We avoid touching the kernel client here (GC-time hazard).
+        shutil.rmtree(getattr(self, "workdir", ""), ignore_errors=True)

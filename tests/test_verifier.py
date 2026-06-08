@@ -43,6 +43,14 @@ def test_unbalanced_field_is_skipped_not_crashing():
     assert extract_answers("@outlier_list[[]") == {}
 
 
+def test_nested_tag_inside_value_not_double_extracted():
+    # Regression (CRITICAL-1): a @tag inside another tag's value must NOT become
+    # its own field. Only the outer 'result' is captured; 'detail' is not a key.
+    got = extract_answers("@result[see @detail[42] here]")
+    assert got == {"result": "see @detail[42] here"}
+    assert "detail" not in got
+
+
 def test_duplicate_name_last_wins():
     assert extract_answers("@x[1] @x[2]") == {"x": "2"}
 
@@ -131,6 +139,28 @@ def test_list_length_mismatch_is_wrong():
 
 def test_list_elements_use_numeric_tolerance():
     assert compare_value("[1.0, 2.0]", "[1, 2]")
+
+
+def test_short_comma_list_not_misread_as_thousands():
+    # Regression (CRITICAL-2): "2,3" is the list [2,3], NOT the number 23.
+    assert infer_type("2,3") == "list"
+    assert not compare_value("23", "2,3")        # the false-positive we fixed
+    assert compare_value("2, 3", "2,3")          # same list, spacing-insensitive
+
+
+def test_real_thousands_separator_still_numeric():
+    # Valid 3-digit grouping IS a number (model may output thousands separators).
+    assert infer_type("1,234.5") == "numeric"
+    assert compare_value("1,234.5", "1234.5")
+    assert compare_value("$1,234", "1234")
+
+
+def test_dict_literal_gold_is_categorical_not_list():
+    # Regression (CRITICAL-3): {...} gold must not be split on its inner commas.
+    g = "{'month_1': 7.17, 'month_2': 6.53}"
+    assert infer_type(g) == "categorical"
+    assert compare_value(g, g)                    # identical dict strings match
+    assert not compare_value("7.17, 6.53", g)     # not naively comma-split
 
 
 # ---------------------------------------------------------------------------

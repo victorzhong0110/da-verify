@@ -28,6 +28,12 @@ def test_pass_at_k_requires_enough_samples():
         pass_at_k(3, 1, 5)
 
 
+def test_pass_at_k_rejects_c_greater_than_n():
+    # Regression (HIGH-1): a corrupt score (c>n) must raise, not silently return 1.0.
+    with pytest.raises(ValueError):
+        pass_at_k(3, 5, 1)
+
+
 def test_reliability_is_strict():
     assert reliability(5, 5) == 1.0
     assert reliability(5, 4) == 0.0

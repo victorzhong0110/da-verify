@@ -100,7 +100,10 @@ def extract_answers(response: str | None) -> dict[str, str]:
     if not response:
         return out
     pos = 0
-    for m in _NAME_START.finditer(response):
+    while True:
+        m = _NAME_START.search(response, pos)
+        if not m:
+            break
         name = m.group(1)
         i = m.end()  # first char after the opening '['
         depth = 1
@@ -113,9 +116,12 @@ def extract_answers(response: str | None) -> dict[str, str]:
             i += 1
         if depth == 0:
             out[name] = response[m.end() : i - 1].strip()
-        # if depth != 0 the field is unbalanced/unterminated -> we skip it,
-        # which surfaces as a missing answer (and is caught by the self-check)
-        pos = i
+            pos = i  # skip the consumed value, so a nested @tag inside it is NOT
+            #          re-extracted as its own field (duplicate top-level => last wins)
+        else:
+            # unbalanced/unterminated -> skip this opener (advance past it to avoid
+            # an infinite loop); surfaces as a missing answer, caught by self-check
+            pos = m.end()
     return out
 
 
@@ -124,12 +130,14 @@ def extract_answers(response: str | None) -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 
-def _try_float(s: str) -> float | None:
-    """Parse a number, tolerating model-style noise ($ , % , thousands commas).
+# A comma is a THOUSANDS separator only in valid 3-digit groupings (1,234 / 12,345,678
+# / 1,234.5). Anything else with a comma (e.g. "2,3") is NOT a number — it's a list.
+# This is what stops "2,3" (the list [2,3]) being misread as 23.
+_THOUSANDS_RE = re.compile(r"^-?\d{1,3}(,\d{3})+(\.\d+)?$")
 
-    We only call this once we already believe the value is numeric, so removing
-    commas as thousands separators here is safe (lists are routed elsewhere).
-    """
+
+def _try_float(s: str) -> float | None:
+    """Parse a number, tolerating model-style noise ($ , % , valid thousands commas)."""
     s = s.strip().strip("'\"").strip()
     if s == "":
         return None
@@ -137,22 +145,23 @@ def _try_float(s: str) -> float | None:
         return float(s)
     except ValueError:
         pass
-    cleaned = s.replace(",", "").replace("$", "").replace("¥", "").replace("€", "").strip()
-    pct = cleaned.endswith("%")
-    if pct:
-        cleaned = cleaned[:-1].strip()
+    cleaned = s.lstrip("$¥€").strip()
+    if cleaned.endswith("%"):
+        cleaned = cleaned[:-1].strip()  # NOTE: we do NOT divide by 100 — format dictates form
+    if "," in cleaned and not _THOUSANDS_RE.match(cleaned):
+        return None  # commas not in thousands positions => not a number (likely a list)
     try:
-        # NOTE: we do NOT divide percent by 100 — the question's format spec
-        # dictates the expected form; auto-dividing would mask real mismatches.
-        return float(cleaned)
+        return float(cleaned.replace(",", ""))
     except ValueError:
         return None
 
 
 def _looks_like_list(gold: str) -> bool:
     """A gold value is a list iff it is bracket-wrapped OR comma-separated AND
-    is not itself a single parseable number."""
+    is not itself a single parseable number. Dict literals are NOT lists."""
     s = gold.strip()
+    if s.startswith("{") and s.endswith("}"):
+        return False  # dict literal -> compare whole-string (categorical), not split on commas
     if (s.startswith("[") and s.endswith("]")) or (s.startswith("(") and s.endswith(")")):
         return True
     if "," in s and _try_float(s) is None:
