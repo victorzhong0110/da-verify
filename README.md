@@ -14,6 +14,10 @@
 This README is **evidence-first**: every technique appears only where it earns
 its place, with a one-line engineering reason. No keyword stuffing.
 
+> 📄 **Full technical write-up: [`report/report.md`](report/report.md)** — the
+> C0/C1/C2 result, the honest null, and the two harness artifacts error analysis
+> caught.
+
 ---
 
 ## Status — W1 done: the verifier (the foundation)
