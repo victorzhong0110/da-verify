@@ -1,5 +1,7 @@
 # da-verify
 
+[![CI](https://github.com/victorzhong0110/da-verify/actions/workflows/ci.yml/badge.svg)](https://github.com/victorzhong0110/da-verify/actions/workflows/ci.yml)
+
 **A verification-in-the-loop data-analysis agent + a rigorous evaluation harness.**
 
 > **Thesis.** On data-analysis tasks where answers can be checked by a program,
@@ -102,6 +104,9 @@ best-effort memory cap (`RLIMIT_AS`; macOS may ignore). **Not enforced here**
 (deferred to a container with `--network none` + cgroups): network isolation,
 filesystem access beyond cwd. The module docstring states this — no false
 sense of security.
+
+> ⚠️ **Without `--network none`, LLM-generated code can make outbound requests.**
+> Run untrusted models / untrusted task data only inside a network-isolated container.
 
 ### Benchmark ambiguities found (logged, not hidden)
 
