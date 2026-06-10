@@ -185,3 +185,72 @@ def test_c2_uses_separate_verifier_model(monkeypatch):
     tr = run_c2(_task(), solver, _FakeSandbox(), max_steps=5, verifier_llm=verifier)
     assert tr.final_response == "@x[2]"
     assert solver.n == 1 and verifier.n == 1
+
+
+# ---- C3: programmatic verification (self-consistency agreement gate) -------
+
+from da_verify.agent.react import _majority_value, run_c3  # noqa: E402
+
+
+def test_c3_agreement_accepts_first_solve_no_third_call(monkeypatch):
+    # Two independent solves agree under grader tolerance ("1" vs "1.0") ->
+    # accept solve #1 verbatim; the third solve must never be spent.
+    monkeypatch.setattr(react_mod, "KernelSandbox", _CtxSandbox)
+    llm = _ScriptedLLM([_final("@x[1]"), _final("@x[1.0]")])
+    tr = run_c3(_task(), llm, _FakeSandbox(), max_steps=5)
+    assert tr.condition == "c3"
+    assert tr.final_response == "@x[1]"
+    assert llm.n == 2  # exactly two solves
+
+
+def test_c3_disagreement_resolved_by_majority(monkeypatch):
+    # 1 vs 2 disagree -> third solve breaks the tie; 2-of-3 majority wins.
+    monkeypatch.setattr(react_mod, "KernelSandbox", _CtxSandbox)
+    llm = _ScriptedLLM([_final("@x[1]"), _final("@x[2]"), _final("@x[2]")])
+    tr = run_c3(_task(), llm, _FakeSandbox(), max_steps=5)
+    assert tr.final_response == "@x[2]"
+    assert llm.n == 3
+
+
+def test_c3_no_consensus_keeps_baseline(monkeypatch):
+    # Three mutually disagreeing answers -> conservative fallback to solve #1.
+    monkeypatch.setattr(react_mod, "KernelSandbox", _CtxSandbox)
+    llm = _ScriptedLLM([_final("@x[1]"), _final("@x[2]"), _final("@x[3]")])
+    tr = run_c3(_task(), llm, _FakeSandbox(), max_steps=5)
+    assert tr.final_response == "@x[1]"
+
+
+def test_c3_resolve_error_degrades_to_c0(monkeypatch):
+    # A provider failure on the re-solve must NOT cascade: the sample keeps
+    # solve #1's answer and surfaces the error (quota/rate-limit resilience).
+    monkeypatch.setattr(react_mod, "KernelSandbox", _CtxSandbox)
+    llm = _ScriptedLLM([_final("@x[1]"), RuntimeError("quota exhausted")])
+    tr = run_c3(_task(), llm, _FakeSandbox(), max_steps=5)
+    assert tr.final_response == "@x[1]"
+    assert tr.error and "quota" in tr.error
+
+
+def test_c3_multifield_per_field_majority(monkeypatch):
+    # Majority is per-FIELD: x settles on 2 (solves 2+3), y on 9 (solves 1+2).
+    monkeypatch.setattr(react_mod, "KernelSandbox", _CtxSandbox)
+    task = Task(id=1, question="q", concepts=(), constraints="", answer_format="",
+                file_name="t.csv", level="easy",
+                gold=(GoldAnswer("x", "0"), GoldAnswer("y", "0")))
+    llm = _ScriptedLLM([_final("@x[1] @y[9]"), _final("@x[2] @y[9]"), _final("@x[2] @y[8]")])
+    tr = run_c3(task, llm, _FakeSandbox(), max_steps=5)
+    assert "@x[2]" in tr.final_response and "@y[9]" in tr.final_response
+
+
+def test_c3_incomplete_second_solve_triggers_third(monkeypatch):
+    # Solve #2 missing a required field counts as disagreement, not agreement.
+    monkeypatch.setattr(react_mod, "KernelSandbox", _CtxSandbox)
+    llm = _ScriptedLLM([_final("@x[1]"), _final("no answer here"), _final("@x[1]")])
+    tr = run_c3(_task(), llm, _FakeSandbox(), max_steps=5)
+    assert tr.final_response == "@x[1]"  # majority from solves 1+3
+    assert llm.n == 3
+
+
+def test_majority_value_uses_grader_tolerance():
+    assert _majority_value(["0.5", "0.50", "7"]) == "0.5"
+    assert _majority_value(["1", "2", "3"]) is None
+    assert _majority_value(["a", "A ", "b"]) == "a"  # casefold+strip text compare

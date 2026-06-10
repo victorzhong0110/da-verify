@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from ..llm.client import LLMClient
 from ..sandbox import KernelSandbox
 from ..tasks.loader import Task
-from ..tasks.verifier import extract_answers
+from ..tasks.verifier import compare_value, extract_answers
 from .tools import TOOL_SCHEMAS, dispatch_tool
 
 _SYSTEM = """You are a careful data analyst. You answer questions about a dataset \
@@ -233,3 +233,92 @@ def run_c2(task: Task, llm: LLMClient, sandbox: KernelSandbox, max_steps: int = 
         verr,
         condition="c2",
     )
+
+
+# ---- C3: programmatic verification by cross-sample agreement ---------------
+
+# Inner re-solve sample ids live far above the outer 0..k-1 range so their
+# cache keys can never collide with ordinary samples of any condition.
+_C3_SAMPLE_STRIDE = 1000
+
+
+def _fields_agree(a: dict[str, str], b: dict[str, str], required: set[str]) -> bool:
+    """Both answers cover every required field AND every required value matches
+    under the SAME tolerance the grader uses. Gold values are never consulted —
+    only the two candidates are compared with each other."""
+    if not (required.issubset(a) and required.issubset(b)):
+        return False
+    return all(compare_value(a[f], b[f]) for f in required)
+
+
+def _majority_value(values: list[str]) -> str | None:
+    """A value at least 2 of the (<=3) values agree with, else None."""
+    for v in values:
+        if sum(1 for w in values if compare_value(w, v)) >= 2:
+            return v
+    return None
+
+
+def _assemble_fields(fields: dict[str, str]) -> str:
+    return ", ".join(f"@{name}[{value}]" for name, value in fields.items())
+
+
+def run_c3(task: Task, llm: LLMClient, sandbox: KernelSandbox, max_steps: int = 8,
+           sample_id: int = 0) -> RunTrace:
+    """C3: programmatic verification — self-consistency with a code-checked
+    agreement gate. Solve the task twice independently; accept iff every
+    required field agrees (grader tolerance, gold never consulted). On
+    disagreement, solve a third time and take a per-field 2-of-3 majority;
+    no majority on any field -> keep solve #1.
+
+    No LLM ever judges anything: the verification signal is cross-sample
+    agreement, checked by code. Solve #1 is byte-identical to C0 (replays from
+    cache; keeps sample-level pairing with C0). A provider error on a re-solve
+    degrades that sample to C0 instead of cascading junk — relevant on
+    rate-limited / quota-capped providers.
+    """
+    messages = _init_messages(task)
+    final, steps, ntc, hit_max, err = _react_loop(messages, llm, sandbox, max_steps, sample_id)
+    if err or not final.strip():
+        return RunTrace(task.id, final, steps, ntc, messages, hit_max, err, condition="c3")
+
+    required = {g.name for g in task.gold}
+    answers = [extract_answers(final)]
+    total_steps, total_ntc, all_msgs, hit_any = steps, ntc, messages, hit_max
+
+    def _resolve(attempt: int) -> tuple[str, str | None]:
+        nonlocal total_steps, total_ntc, all_msgs, hit_any
+        msgs = _init_messages(task)
+        with KernelSandbox(data_csv=task.table_path) as sb:
+            rfinal, rsteps, rntc, rhit, rerr = _react_loop(
+                msgs, llm, sb, max_steps, _C3_SAMPLE_STRIDE * attempt + sample_id)
+        total_steps += rsteps
+        total_ntc += rntc
+        all_msgs = all_msgs + msgs
+        hit_any = hit_any or rhit
+        return rfinal, rerr
+
+    final2, err2 = _resolve(1)
+    if err2:  # provider failed mid-condition -> this sample degrades to C0
+        return RunTrace(task.id, final, total_steps, total_ntc, all_msgs, hit_any, err2,
+                        condition="c3")
+    answers.append(extract_answers(final2))
+    if _fields_agree(answers[0], answers[1], required):
+        return RunTrace(task.id, final, total_steps, total_ntc, all_msgs, hit_any, None,
+                        condition="c3")
+
+    final3, err3 = _resolve(2)
+    if err3:
+        return RunTrace(task.id, final, total_steps, total_ntc, all_msgs, hit_any, err3,
+                        condition="c3")
+    answers.append(extract_answers(final3))
+
+    fields: dict[str, str] = {}
+    for name in sorted(required):
+        winner = _majority_value([a[name] for a in answers if name in a])
+        if winner is None:  # no consensus on this field -> keep the baseline answer
+            return RunTrace(task.id, final, total_steps, total_ntc, all_msgs, hit_any, None,
+                            condition="c3")
+        fields[name] = winner
+    return RunTrace(task.id, _assemble_fields(fields), total_steps, total_ntc, all_msgs,
+                    hit_any, None, condition="c3")

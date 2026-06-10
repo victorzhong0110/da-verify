@@ -31,7 +31,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--n", type=int, default=40)
     ap.add_argument("--condition", choices=list(CONDITIONS), default="c0",
-                    help="verification condition: c0 (none) | c1 (self-verify)")
+                    help="c0 none | c1 self-verify | c2 LLM verifier | c3 programmatic self-consistency")
     ap.add_argument("--k", type=int, default=1, help="samples per task (pass@k)")
     ap.add_argument("--temp", type=float, default=None, help="default 0 if k==1 else 0.7")
     ap.add_argument("--max-steps", type=int, default=8)
