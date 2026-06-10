@@ -4,4 +4,6 @@ openai>=1.40            # OpenAI-compatible client (MiniMax / DeepSeek / ...)
 jupyter_client>=8.0     # sandbox kernel
 ipykernel>=6.0          # the kernel the sandbox launches
 pandas>=2.0             # data analysis in-sandbox
+numpy>=1.24             # injected into sandbox startup (don't rely on pandas pulling it)
 pytest>=8.0             # tests
+pytest-cov>=4.0         # coverage (`pytest --cov=src`)

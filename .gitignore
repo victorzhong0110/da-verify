@@ -20,3 +20,7 @@ data/daeval/
 
 # transient run logs
 *.log
+
+# macOS noise
+.DS_Store
+.coverage

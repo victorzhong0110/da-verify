@@ -1,0 +1,11 @@
+# Exact versions the committed results/ numbers were produced and the test
+# suite verified against (2026-06-11, macOS, Python 3.13).
+# For a guaranteed-reproducible environment: pip install -r requirements.lock
+# For a floor-constrained fresh install:     pip install -r requirements.txt
+openai==2.30.0
+jupyter_client==8.8.0
+ipykernel==7.2.0
+pandas==3.0.2
+numpy==2.4.3
+pytest==9.0.2
+pytest-cov==7.1.0
