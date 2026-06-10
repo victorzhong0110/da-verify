@@ -285,6 +285,38 @@ grounded in a programmatic check rather than another LLM's re-derivation.
 
 ---
 
+## Status — W7: the powered run — verification works where instability lives
+
+W6 ended with "a real signal, if one exists, needs k>1 diversity, run serially."
+W7 ran exactly that: C0 vs C2 (same-model verifier), 40 tasks × k=5 samples,
+temp 0.7, strictly serial (the lesson from W6's rate-limit artifact).
+
+### C0 vs C2 (40 tasks, k=5, temp 0.7, serial)
+
+| metric | C0 | C2 | Δ |
+|---|---|---|---|
+| pass@1 (mean per-task rate) | 64.5% | 75.5% | **+11.0%** |
+| 95% bootstrap CI (paired) | — | — | **[+3.0%, +19.5%] — excludes 0** |
+| pass@5 | 85.0% | 90.0% | +5.0% |
+| reliability (pass^5) | 40.0% | 57.5% | **+17.5%** |
+| format-ok rate | 70.5% | 83.5% | +13.0% |
+| tasks improved / worsened | — | 12 / 2 | — |
+
+**The finding that completes the story:** the same C2 that was statistically
+invisible at temp 0 / k=1 (+2.5%, McNemar p = 1.00) is large and significant at
+temp 0.7 / k=5. **Verification repairs instability, not capability.** At temp 0
+a deterministic solver leaves no variance to correct; at temp 0.7 the model is
+capable-but-unreliable (pass@1 64.5% vs pass@5 85.0% — a 20.5pt gap), and an
+independent re-derivation catches the unlucky samples. Fittingly, the largest
+effects are on **reliability** (pass^5 +17.5pt) and **format** (+13pt):
+verification as variance reduction, not capability injection.
+
+Scope guard: same-model verifier, n=40, one provider. The remaining asks —
+programmatic (non-LLM) checks, a cross-family verifier, full-DAEval n — still
+stand; see the report.
+
+---
+
 ## Verifier design — what's earned, and why (defend each in interview)
 
 - **Balanced-bracket extraction** over the official non-greedy `@(\w+)\[(.*?)\]`,

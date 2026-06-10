@@ -17,9 +17,20 @@ I built a data-analysis agent and a deliberately-trustworthy evaluation harness,
 | **C2** — independent verifier, *same* model | 85.0% | +2.5% | 1 / 0 | p = 1.00 |
 | **C2** — independent verifier, *stronger* model (M3) | 82.5% | +0.0% | 0 / 0 | p = 1.00 |
 
-**Finding:** at this scale (n = 40, k = 1, temp 0), **no verification variant — self, same-model, or a stronger model — produced a statistically detectable accuracy gain.** A stronger verifier did not help.
+**Finding (temp 0 arm):** at this scale (n = 40, k = 1, temp 0), **no verification variant — self, same-model, or a stronger model — produced a statistically detectable accuracy gain.** A stronger verifier did not help.
 
-The more useful output is *how* I got there. Two intermediate runs produced striking numbers — a temp-0.7 collapse to 17.5%, and a "stronger verifier makes it 10% **worse**" — and **both were harness artifacts that error analysis removed**, not facts about the model. Catching those is the actual point: the project is about *trustworthy measurement of agents*, and a measurement you can't trust to reject its own false positives isn't measurement.
+Then the powered run (§7) — the same C0 vs C2, but k = 5 samples per task at temp 0.7, run strictly serially:
+
+| Condition | pass@1 | pass@5 | pass^5 (reliability) | format-ok |
+|---|---|---|---|---|
+| **C0** — no verification | 64.5% | 85.0% | 40.0% | 70.5% |
+| **C2** — independent verifier, same model | 75.5% | 90.0% | 57.5% | 83.5% |
+
+**Δ pass@1 = +11.0%, paired bootstrap 95% CI [+3.0%, +19.5%] — significant; 12 tasks improved, 2 worsened.**
+
+**Headline finding:** the same verification that is statistically invisible on a deterministic solver is large and significant on a stochastic one. **Verification repairs instability, not capability** — its biggest effects are reliability (pass^5 +17.5pt) and format (+13pt), i.e. variance reduction.
+
+The other useful output is *how* I got there. Two intermediate runs produced striking numbers — a temp-0.7 collapse to 17.5%, and a "stronger verifier makes it 10% **worse**" — and **both were harness artifacts that error analysis removed**, not facts about the model. Catching those is the actual point: the project is about *trustworthy measurement of agents*, and a measurement you can't trust to reject its own false positives isn't measurement.
 
 ---
 
@@ -103,22 +114,43 @@ The real conclusion the M3 experiment supports is the opposite of the tweet: **t
 I would rather state these than have a reader find them.
 
 - **Underpowered.** n = 40, k = 1, with 0–1 discordant pairs. The study cannot detect a small (a-few-percent) effect; "not significant" here means "no detectable effect," not "no effect."
-- **temp 0 limits self-verification structurally** — a deterministic re-attempt reproduces the original answer. An early 8-task probe at temp 0.7 showed the model is *capable-but-unreliable* (pass@1 ≈ 45% vs pass@5 ≈ 75%), which is the regime where verification *should* matter most; measuring it there cleanly (serially) is unfinished.
+- **temp 0 limits self-verification structurally** — a deterministic re-attempt reproduces the original answer. An early 8-task probe at temp 0.7 showed the model is *capable-but-unreliable* (pass@1 ≈ 45% vs pass@5 ≈ 75%), which is the regime where verification *should* matter most. §7 measures it there cleanly (serially) — and finds the effect.
 - **Same provider.** Solver and verifier share a vendor and likely correlated blind spots; "stronger" (M3) is by reputation, not established on these tasks.
 - **Benchmark ambiguities.** Some gold answers are non-reproducible (unfixed random seeds) or under-specified ("outliers" without a definition); these are logged, and the subset is biased toward robustly-checkable tasks.
 
 ---
 
-## 7. What a powered, fair study would need
+## 7. The powered run: verification works where instability lives
 
-- **More tasks** (the full DAEval, not 40) and **k > 1 samples**, run **serially** (or with backoff) to avoid §5.1.
-- **temp > 0**, to give verification correctable variance to work on.
-- **Field-aware reconciliation** (merge per-field, or require completeness) so multi-part answers aren't an artifact source.
-- **Verification grounded in a programmatic check** (re-derive via an independent method and require agreement, or assert invariants), rather than trusting another LLM's re-derivation — the §4/§5 results suggest same-family LLM verification has limited headroom.
+The first slice of the powered design — **k = 5 samples per task at temp 0.7, 40 tasks, strictly serial** (per §5.1), field-completeness reconciliation in place (per §5.2) — C0 vs C2 with the same-model verifier:
+
+| metric | C0 | C2 | Δ |
+|---|---|---|---|
+| pass@1 (mean per-task rate) | 64.5% | 75.5% | **+11.0%** |
+| paired bootstrap 95% CI | — | — | **[+3.0%, +19.5%] — excludes 0** |
+| pass@5 | 85.0% | 90.0% | +5.0% |
+| reliability (pass^5) | 40.0% | 57.5% | **+17.5%** |
+| format-ok rate | 70.5% | 83.5% | +13.0% |
+| tasks improved / worsened | — | 12 / 2 | — |
+
+Read together with §4, the result is a clean two-regime story:
+
+- **Deterministic solver (temp 0, k = 1): Δ +2.5%, not significant.** There is no variance for verification to correct; the verifier mostly re-derives the same answer the same way.
+- **Stochastic solver (temp 0.7, k = 5): Δ +11.0%, significant.** The solver is capable-but-unreliable (pass@1 64.5% vs pass@5 85.0% — a 20.5pt gap), and an independent re-derivation catches the unlucky samples.
+
+**Verification repairs instability, not capability.** Its largest effects are exactly where the instability shows: reliability (pass^5 +17.5pt) and format compliance (+13pt — temp 0.7 degrades format from 90% to 70.5%, and the verifier recovers most of it). The 2 worsened tasks include id=75, the systematic sign-flip from §4's error analysis — consistent with the earlier observation that re-derivation by the same model does not fix *systematic* errors, only sampling noise.
 
 ---
 
-## 8. Reproducibility
+## 8. What a fully powered, fair study would still need
+
+- **More tasks** — the full DAEval (≈250 verifiable tasks), not the 40-task subset; the CI above is wide ([+3, +19.5]).
+- **A cross-family verifier** — solver and verifier still share a vendor and likely correlated blind spots.
+- **Verification grounded in a programmatic check** (re-derive via an independent method and require agreement, or assert invariants), rather than trusting another LLM's re-derivation — §7 shows LLM re-derivation fixes sampling noise; whether programmatic checks also fix *systematic* errors (id=75-style) is the open question.
+
+---
+
+## 9. Reproducibility
 
 ```bash
 bash scripts/fetch_data.sh                 # pull DAEval (CC BY-NC, not vendored)
@@ -127,6 +159,9 @@ python3 scripts/make_subset.py             # the stratified 40-task subset
 python3 scripts/gold_self_check.py         # grader self-check gate
 python3 scripts/run_eval.py --condition c0 --n 40 --k 1
 python3 scripts/run_eval.py --condition c2 --verifier-model MiniMax-M3 --n 40 --k 1
+# the powered run (§7) — serial; takes a while on a fresh cache
+python3 scripts/run_eval.py --condition c0 --n 40 --k 5
+python3 scripts/run_eval.py --condition c2 --n 40 --k 5
 python3 scripts/compare_conditions.py --a <c0>.jsonl --b <c2>.jsonl --a-name C0 --b-name C2
 ```
 
@@ -134,9 +169,12 @@ LLM responses are content-addressed and cached, so re-runs are deterministic and
 
 ---
 
-## 9. What this project actually demonstrates
+## 10. What this project actually demonstrates
 
-Not "verification works" (it didn't, here) — but the thing the study set out to show regardless of the sign of the effect: **the ability to measure an agent's quality in a way you can trust, including trusting it to reject its own false positives.** A verified grader, the right paired statistics, an honest null, and two self-caught artifacts are, for an evaluation problem, the result.
+Two things, in order of importance:
+
+1. **Measurement you can trust.** A verified grader, paired statistics, two self-caught artifacts (§5), and an honest null in the regime where the null is real (§4). A measurement that can't reject its own false positives isn't measurement.
+2. **A conditional, mechanistic answer to the opening question.** Verification's value is not a constant — it is a function of solver instability. On a deterministic solver it is statistically invisible; on a stochastic one it recovers +11% accuracy and +17.5pt reliability (§7), by repairing sampling noise rather than capability gaps. "Does verification help?" was the wrong question; "*where* does it help?" has a defensible answer.
 
 ---
 
