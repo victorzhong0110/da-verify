@@ -21,7 +21,8 @@ from da_verify.eval.stats import bootstrap_paired_diff, compare_paired
 
 
 def _load(path: str) -> dict[int, tuple[int, int]]:
-    rows = [json.loads(line) for line in open(path, encoding="utf-8")]
+    with open(path, encoding="utf-8") as fh:
+        rows = [json.loads(line) for line in fh]
     return {r["id"]: (r["n_correct"], r["k"]) for r in rows}
 
 
@@ -46,8 +47,8 @@ def main() -> None:
         cmp = compare_paired(a, b)
         print(cmp.summary(args.a_name, args.b_name))
         print("-" * 60)
-        print(f"{args.b_name} FIXED (A✗→B✓): {[i for i in ids if not a[ids.index(i)] and b[ids.index(i)]]}")
-        print(f"{args.b_name} BROKE (A✓→B✗): {[i for i in ids if a[ids.index(i)] and not b[ids.index(i)]]}")
+        print(f"{args.b_name} FIXED (A✗→B✓): {[i for i, ai, bi in zip(ids, a, b) if not ai and bi]}")
+        print(f"{args.b_name} BROKE (A✓→B✗): {[i for i, ai, bi in zip(ids, a, b) if ai and not bi]}")
     else:
         a = [A[i][0] / A[i][1] for i in ids]
         b = [B[i][0] / B[i][1] for i in ids]

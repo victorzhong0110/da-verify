@@ -309,7 +309,7 @@ def official_extract_format(input_string: str) -> tuple[list[str], list[str]]:
     return [m[0] for m in matches], [m[1] for m in matches]
 
 
-def official_is_equal(response, label) -> bool:
+def official_is_equal(response: str, label: str) -> bool:
     if response == label:
         return True
     try:

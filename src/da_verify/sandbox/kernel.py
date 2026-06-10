@@ -120,7 +120,8 @@ class KernelSandbox:
         return self._raw_exec(code, timeout=self.cell_timeout)
 
     def _raw_exec(self, code: str, timeout: float) -> ExecResult:
-        assert self._kc is not None, "sandbox not started"
+        if self._kc is None:  # not an assert: must survive `python -O`
+            raise RuntimeError("sandbox not started")
         msg_id = self._kc.execute(code)
         stdout: list[str] = []
         result: list[str] = []

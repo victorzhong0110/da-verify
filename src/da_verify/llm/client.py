@@ -19,6 +19,7 @@ import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from openai import OpenAI
 
@@ -128,7 +129,7 @@ class LLMClient:
         return norm
 
     @staticmethod
-    def _normalise(resp) -> LLMResponse:
+    def _normalise(resp: Any) -> LLMResponse:  # openai SDK ChatCompletion (provider-variant)
         if not getattr(resp, "choices", None):
             # rate-limit / content-filter can return empty choices -> surface clearly
             raise ValueError("LLM returned no choices")

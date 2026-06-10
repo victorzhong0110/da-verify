@@ -107,7 +107,8 @@ class RunTrace:
 
 
 def _react_loop(messages: list[dict], llm: LLMClient, sandbox: KernelSandbox,
-                max_steps: int, sample_id: int, n_tool_calls: int = 0):
+                max_steps: int, sample_id: int,
+                n_tool_calls: int = 0) -> tuple[str, int, int, bool, str | None]:
     """Run Thought->Action->Observation on `messages` (mutated in place) until the
     model answers without a tool call, or max_steps is hit. Returns
     (final_response, steps, n_tool_calls, hit_max_steps, error)."""
