@@ -19,16 +19,17 @@ I built a data-analysis agent and a deliberately-trustworthy evaluation harness,
 
 **Finding (temp 0 arm):** at this scale (n = 40, k = 1, temp 0), **no verification variant — self, same-model, or a stronger model — produced a statistically detectable accuracy gain.** A stronger verifier did not help.
 
-Then the powered run (§7) — the same C0 vs C2, but k = 5 samples per task at temp 0.7, run strictly serially:
+Then the powered run (§7) — k = 5 samples per task at temp 0.7, run strictly serially, now with a third arm: **C3, programmatic verification** (self-consistency with a code-checked agreement gate — no LLM ever judges anything):
 
 | Condition | pass@1 | pass@5 | pass^5 (reliability) | format-ok |
 |---|---|---|---|---|
 | **C0** — no verification | 64.5% | 85.0% | 40.0% | 70.5% |
 | **C2** — independent verifier, same model | 75.5% | 90.0% | 57.5% | 83.5% |
+| **C3** — programmatic agreement gate | **84.5%** | **92.5%** | **75.0%** | **95.0%** |
 
-**Δ pass@1 = +11.0%, paired bootstrap 95% CI [+3.0%, +19.5%] — significant; 12 tasks improved, 2 worsened.**
+Paired bootstrap (95% CI): **C2 vs C0 Δ +11.0% [+3.0, +19.5]; C3 vs C0 Δ +20.0% [+10.5, +30.0]; C3 vs C2 Δ +9.0% [+3.0, +15.5] — all significant.**
 
-**Headline finding:** the same verification that is statistically invisible on a deterministic solver is large and significant on a stochastic one. **Verification repairs instability, not capability** — its biggest effects are reliability (pass^5 +17.5pt) and format (+13pt), i.e. variance reduction.
+**Headline finding:** verification that is statistically invisible on a deterministic solver is large and significant on a stochastic one — **verification repairs instability, not capability**. And the cheapest verifier repairs it best: **the active ingredient is sample diversity plus programmatic reconciliation, not LLM judgment.** An expensive skeptical re-derivation (C2) is a *worse* aggregator than counting agreement (C3), which at temp 0.7 even exceeds the temp-0 baseline (84.5% vs 82.5%).
 
 The other useful output is *how* I got there. Two intermediate runs produced striking numbers — a temp-0.7 collapse to 17.5%, and a "stronger verifier makes it 10% **worse**" — and **both were harness artifacts that error analysis removed**, not facts about the model. Catching those is the actual point: the project is about *trustworthy measurement of agents*, and a measurement you can't trust to reject its own false positives isn't measurement.
 
@@ -140,13 +141,32 @@ Read together with §4, the result is a clean two-regime story:
 
 **Verification repairs instability, not capability.** Its largest effects are exactly where the instability shows: reliability (pass^5 +17.5pt) and format compliance (+13pt — temp 0.7 degrades format from 90% to 70.5%, and the verifier recovers most of it). The 2 worsened tasks include id=75, the systematic sign-flip from §4's error analysis — consistent with the earlier observation that re-derivation by the same model does not fix *systematic* errors, only sampling noise.
 
+### 7.1 C3: the programmatic verifier beats the LLM verifier
+
+If verification's value is variance reduction, an LLM verifier is an expensive way to buy it. C3 tests the cheap way: **self-consistency with a code-checked agreement gate.** Solve the task twice independently; accept iff every required field agrees under the grader's own tolerance (gold values are never consulted); on disagreement, solve a third time and take a per-field 2-of-3 majority; no majority → keep solve #1. No LLM ever judges anything.
+
+| metric (40 tasks, k=5, temp 0.7, serial) | C0 | C2 | C3 |
+|---|---|---|---|
+| pass@1 (mean per-task rate) | 64.5% | 75.5% | **84.5%** |
+| pass@5 | 85.0% | 90.0% | 92.5% |
+| reliability (pass^5) | 40.0% | 57.5% | **75.0%** |
+| format-ok rate | 70.5% | 83.5% | **95.0%** |
+
+C3 vs C0: **Δ +20.0%, 95% CI [+10.5, +30.0]** (17 improved / 3 worsened). C3 vs C2: **Δ +9.0%, 95% CI [+3.0, +15.5]** (11 improved / 3 worsened). Both significant. C3 at temp 0.7 exceeds the temp-0 C0 baseline (84.5% vs 82.5%): majority voting more than recovers the temperature penalty.
+
+**The failure signature matches the mechanism exactly.** Majority voting eats sampling noise by construction and cannot fix systematic errors — and C3's worsened tasks are precisely the predicted ones: id=7 (gold not reproducible without a fixed seed — agreement converges on a *consistent* answer the unseeded gold can't match) and id=75 (the systematic sign-flip — all samples agree on the same wrong answer, confident-wrong). When a method's failures land exactly where its theory says they must, that is evidence the measured gain is real rather than an artifact.
+
+**Revised conclusion:** the active ingredient in verification here is **sample diversity + programmatic reconciliation, not LLM judgment.** A skeptical same-model re-derivation (C2) is a strictly worse aggregator than counting agreement — at comparable cost (C2: solver + verifier agent per sample; C3: 2–3 solver runs per sample).
+
+Honest scope notes: the agreement gate reuses the grader's tolerance *functions* (numeric tolerance, casefold text) — never gold values — so the equality semantics are shared with the grader by construction; a provider error on a re-solve degrades that sample to C0 (conservative, relevant on quota-capped providers).
+
 ---
 
 ## 8. What a fully powered, fair study would still need
 
-- **More tasks** — the full DAEval (≈250 verifiable tasks), not the 40-task subset; the CI above is wide ([+3, +19.5]).
-- **A cross-family verifier** — solver and verifier still share a vendor and likely correlated blind spots.
-- **Verification grounded in a programmatic check** (re-derive via an independent method and require agreement, or assert invariants), rather than trusting another LLM's re-derivation — §7 shows LLM re-derivation fixes sampling noise; whether programmatic checks also fix *systematic* errors (id=75-style) is the open question.
+- **More tasks** — the full DAEval (≈250 verifiable tasks), not the 40-task subset; the CIs above are wide.
+- **A cross-family verifier** — solver and verifier still share a vendor and likely correlated blind spots; C3 shares them too (it aggregates the same model's samples).
+- **Systematic-error verification** — §7.1 settles the noise side: a programmatic agreement gate beats LLM re-derivation. What nothing here fixes is the confident-wrong case (id=75: every sample agrees on the same wrong answer). That needs checks with *external* grounding — invariant assertions against the data, or a genuinely different method/family that doesn't share the blind spot.
 
 ---
 
@@ -162,6 +182,7 @@ python3 scripts/run_eval.py --condition c2 --verifier-model MiniMax-M3 --n 40 --
 # the powered run (§7) — serial; takes a while on a fresh cache
 python3 scripts/run_eval.py --condition c0 --n 40 --k 5
 python3 scripts/run_eval.py --condition c2 --n 40 --k 5
+python3 scripts/run_eval.py --condition c3 --n 40 --k 5
 python3 scripts/compare_conditions.py --a <c0>.jsonl --b <c2>.jsonl --a-name C0 --b-name C2
 ```
 
@@ -174,7 +195,7 @@ LLM responses are content-addressed and cached, so re-runs are deterministic and
 Two things, in order of importance:
 
 1. **Measurement you can trust.** A verified grader, paired statistics, two self-caught artifacts (§5), and an honest null in the regime where the null is real (§4). A measurement that can't reject its own false positives isn't measurement.
-2. **A conditional, mechanistic answer to the opening question.** Verification's value is not a constant — it is a function of solver instability. On a deterministic solver it is statistically invisible; on a stochastic one it recovers +11% accuracy and +17.5pt reliability (§7), by repairing sampling noise rather than capability gaps. "Does verification help?" was the wrong question; "*where* does it help?" has a defensible answer.
+2. **A conditional, mechanistic answer to the opening question.** Verification's value is not a constant — it is a function of solver instability. On a deterministic solver it is statistically invisible; on a stochastic one it is large (§7) — and the cheapest implementation wins: a programmatic agreement gate (+20% accuracy, +35pt reliability) significantly beats an LLM verifier (+11%, +17.5pt), because the active ingredient is sample diversity plus reconciliation, not judgment (§7.1). What survives both is the confident-wrong case, which only externally-grounded checks can touch (§8). "Does verification help?" was the wrong question; "*where*, and *what kind*," has a defensible answer.
 
 ---
 

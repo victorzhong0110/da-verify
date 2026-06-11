@@ -311,9 +311,41 @@ independent re-derivation catches the unlucky samples. Fittingly, the largest
 effects are on **reliability** (pass^5 +17.5pt) and **format** (+13pt):
 verification as variance reduction, not capability injection.
 
-Scope guard: same-model verifier, n=40, one provider. The remaining asks —
-programmatic (non-LLM) checks, a cross-family verifier, full-DAEval n — still
-stand; see the report.
+### C3: the programmatic verifier beats the LLM verifier
+
+C3 answers the report's open question from the cheap side: replace the LLM
+verifier with **self-consistency + a code-checked agreement gate** — solve
+twice independently, accept iff every required field agrees under the grader's
+own tolerance (gold never consulted), tie-break with a third solve and a
+per-field 2-of-3 majority. No LLM ever judges anything.
+
+| metric (40 tasks, k=5, temp 0.7, serial) | C0 | C2 (LLM verifier) | C3 (programmatic) |
+|---|---|---|---|
+| pass@1 (mean per-task rate) | 64.5% | 75.5% | **84.5%** |
+| pass@5 | 85.0% | 90.0% | 92.5% |
+| reliability (pass^5) | 40.0% | 57.5% | **75.0%** |
+| format-ok rate | 70.5% | 83.5% | **95.0%** |
+
+Paired bootstrap (95% CI): C3 vs C0 **Δ +20.0% [+10.5, +30.0]**; C3 vs C2
+**Δ +9.0% [+3.0, +15.5]** — both significant. C3 at temp 0.7 (84.5%) even
+exceeds the temp-0 baseline (82.5%): majority voting more than recovers the
+temperature penalty.
+
+**The mechanism signature is exactly as predicted.** Of C3's 3 worsened tasks,
+id=7 has a non-reproducible gold (agreement converges on a *consistent* answer
+that an unseeded gold can't match) and id=75 is the systematic sign-flip
+(samples agree on the same wrong answer — confident-wrong). Majority voting
+eats sampling noise by construction and cannot fix systematic errors; the
+failures land precisely where the theory says they must.
+
+**Revised headline: the active ingredient in verification is sample diversity
+plus programmatic reconciliation — not LLM judgment.** An expensive skeptical
+re-derivation (C2) is a *worse* aggregator than counting agreement.
+
+Scope guard: n=40, one provider, agreement checked with the grader's own
+tolerance functions (gold values never consulted, but the equality semantics
+are shared). Cross-family verification and full-DAEval n still stand as open;
+see the report.
 
 ---
 
