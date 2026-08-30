@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "da-verify"
+version = "0.2.0"
+description = "Verification as variance reduction on program-checkable data-analysis tasks (InfiAgent-DABench)."
+authors = [{ name = "victorzhong0110", email = "victorzhong0110@gmail.com" }]
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = [
+    "inspect-ai>=0.3.158",
+    "openai>=1.40",
+    "jupyter_client>=8.0",
+    "ipykernel>=6.0",
+    "pandas>=2.0",
+    "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.0",
+]
+
+[project.urls]
+"Source Code" = "https://github.com/victorzhong0110/da-verify"
+"Issue Tracker" = "https://github.com/victorzhong0110/da-verify/issues"
+
+[project.entry-points.inspect_ai]
+da_verify = "da_verify.inspect_eval"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "-q"
