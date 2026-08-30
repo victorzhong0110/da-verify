@@ -3,6 +3,7 @@ __pycache__/
 .pytest_cache/
 .venv/
 .cache/
+*.egg-info/
 eval_outputs/
 
 # secrets + LLM cache

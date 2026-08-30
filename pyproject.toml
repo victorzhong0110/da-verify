@@ -35,6 +35,9 @@ da_verify = "da_verify.inspect_eval"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+da_verify = ["sandbox/Dockerfile", "sandbox/compose.yaml"]
+
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]

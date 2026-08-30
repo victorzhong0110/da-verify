@@ -33,7 +33,6 @@ from inspect_ai.tool import python
 
 from da_verify.agent.react import (
     _USER,
-    _VERIFIER_SYSTEM,
     _VERIFIER_USER,
     _VERIFY,
     _assemble_fields,
@@ -45,6 +44,7 @@ from da_verify.tasks.loader import GoldAnswer
 from da_verify.tasks.loader import Task as DATask
 from da_verify.tasks.loader import load_tasks, tasks_by_id
 from da_verify.tasks.sampler import load_subset_ids
+from da_verify.tasks.verifier import extract_answers
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SUBSET_PATH = REPO_ROOT / "data" / "subsets" / "headline_40.json"
@@ -63,6 +63,14 @@ Answering rules:
 - Follow the required answer FORMAT exactly. It looks like `@answer_name[value]`.
 - Respect every constraint (rounding, which columns, etc.) precisely.
 - When you have the answer, reply with the `@answer_name[value]` token(s) and nothing else. Do not call tools in that final message.
+"""
+
+_VERIFIER_SYSTEM_INSPECT = """You are an INDEPENDENT verifier — a skeptical second analyst.
+You are given a question about a dataset and a CANDIDATE answer produced by someone else. Do NOT assume the candidate is correct.
+
+Your job: recompute the answer yourself, from scratch, from the raw data. Prefer a DIFFERENT method than the most obvious one, and run sanity checks (row counts, null handling, value ranges). Then decide the correct value.
+
+Environment: a `python` tool that runs a FRESH interpreter on every call; pandas and numpy are installed; reload the CSV at the start of every cell; always print(). Finish with the CORRECT answer in the exact required @answer_name[value] format — your independently verified value, whether or not it matches the candidate.
 """
 
 
@@ -185,7 +193,7 @@ def da_verify_agent(condition: Condition = "c0") -> Solver:
             if not candidate.strip():
                 return state
             state.messages = [
-                ChatMessageSystem(content=_VERIFIER_SYSTEM),
+                ChatMessageSystem(content=_VERIFIER_SYSTEM_INSPECT),
                 ChatMessageUser(
                     content=_VERIFIER_USER.format(
                         question=da_task.question,
@@ -193,20 +201,17 @@ def da_verify_agent(condition: Condition = "c0") -> Solver:
                         fmt=da_task.answer_format,
                         candidate=candidate,
                     )
+                    + f"\n\nThe dataset filename is `{da_task.file_name}`."
                 ),
             ]
             await _run_loop(state, generate)
             vfinal = state.output.completion or ""
-            from da_verify.tasks.verifier import extract_answers
-
             verifier_fields = set(extract_answers(vfinal)) if vfinal else set()
             if not required.issubset(verifier_fields):
                 state.output.completion = candidate
             return state
 
         if condition == "c3":
-            from da_verify.tasks.verifier import extract_answers
-
             first = await independent_solve()
             if not first.strip():
                 return state
@@ -269,10 +274,8 @@ def da_verify(
     return Task(
         dataset=MemoryDataset(load_inspect_samples(n)),
         solver=chain(
-            [
-                use_tools(python(timeout=30)),
-                da_verify_agent(condition),
-            ]
+            use_tools(python(timeout=30)),
+            da_verify_agent(condition),
         ),
         scorer=da_verify_scorer(),
         sandbox=("docker", str(COMPOSE_FILE)),

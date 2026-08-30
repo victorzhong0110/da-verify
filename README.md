@@ -20,6 +20,21 @@ its place, with a one-line engineering reason. No keyword stuffing.
 > C0/C1/C2 result, the honest null, and the two harness artifacts error analysis
 > caught.
 
+## Inspect AI (register entry)
+
+The study scripts below still use the in-process Jupyter kernel. For the
+[Inspect Evals Register](https://github.com/UKGovernmentBEIS/inspect_evals/blob/main/register/README.md)
+the same C0–C3 policies run as an Inspect task: Docker sandbox, `network_mode: none`,
+and Inspect's `python()` tool (a **fresh interpreter per call** — reload the CSV
+in every cell). Grader and policies are otherwise unchanged.
+
+```bash
+bash scripts/fetch_data.sh   # InfiAgent @ 3d6c4a70, CC BY-NC, not vendored
+uv sync
+uv run inspect eval src/da_verify/inspect_eval.py@da_verify --model openai/gpt-4o-mini --limit 1
+uv run inspect eval src/da_verify/inspect_eval.py@da_verify -T condition=c3 --model openai/gpt-4o-mini
+```
+
 ---
 
 ## Status — W1 done: the verifier (the foundation)
@@ -377,14 +392,16 @@ headline subset), 1 duplicate-field task, 3 empty-gold tasks.
 
 ## Tests & quality
 
-`python3 -m pytest tests/ -q` → **59 tests**. Covers the load-bearing pieces
-(verifier extraction/comparison/multi-part, pass@k estimator) and the modules
-with subtle logic (sandbox timeout-drain + read-only, LLM cache-key semantics,
-ReAct loop termination + tool-error handling, loader join contracts, sampler
-determinism). A two-reviewer pass (Python + architecture) drove fixes to the
-verifier (nested-tag extraction, short-comma lists, dict-literal gold), the
-pass@k estimator (reject c>n), tool-error propagation, and atomic cache writes.
-`requirements.txt` pins deps so a fresh clone runs.
+`python3 -m pytest tests/ -q` → **93 tests** (the Inspect adapter tests skip if
+`inspect_ai` is missing). Covers the load-bearing pieces (verifier
+extraction/comparison/multi-part, pass@k estimator) and the modules with subtle
+logic (sandbox timeout-drain + read-only, LLM cache-key semantics, ReAct loop
+termination + tool-error handling, loader join contracts, sampler determinism).
+A two-reviewer pass (Python + architecture) drove fixes to the verifier
+(nested-tag extraction, short-comma lists, dict-literal gold), the pass@k
+estimator (reject c>n), tool-error propagation, and atomic cache writes.
+`uv sync` (or `pip install -e ".[dev]"`) installs the Inspect adapter; the Jupyter
+study path still works from `requirements.txt`.
 
 ## Data / attribution
 
