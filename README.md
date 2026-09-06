@@ -6,6 +6,9 @@
 
 **A verification-in-the-loop data-analysis agent + a rigorous evaluation harness.**
 
+> **Inspect Evals:** register submission [UKGovernmentBEIS/inspect_evals#2324](https://github.com/UKGovernmentBEIS/inspect_evals/pull/2324) — Docker `network_mode: none` adapter + full-sample logs. Headline numbers below are from this repo’s controlled study (n=40), independent of listing status.
+
+
 > **Thesis.** On data-analysis tasks where answers can be checked by a program,
 > *how much does adding verification raise an agent's success rate — and at what
 > cost?* This repo measures that with a faithful, reproducible verifier and a
@@ -37,13 +40,15 @@ its place, with a one-line engineering reason. No keyword stuffing.
 > C0/C1/C2 result, the honest null, and the two harness artifacts error analysis
 > caught.
 
-## Inspect AI (register entry)
+## Inspect AI (register submission)
 
 The study scripts below still use the in-process Jupyter kernel. For the
 [Inspect Evals Register](https://github.com/UKGovernmentBEIS/inspect_evals/blob/main/register/README.md)
 the same C0–C3 policies run as an Inspect task: Docker sandbox, `network_mode: none`,
 and Inspect's `python()` tool (a **fresh interpreter per call** — reload the CSV
 in every cell). Grader and policies are otherwise unchanged.
+
+**Pointer:** adapter + logs live in this repo; track upstream listing progress on [#2324](https://github.com/UKGovernmentBEIS/inspect_evals/pull/2324). Study results (C0–C3) do not depend on the listing page.
 
 ```bash
 bash scripts/fetch_data.sh   # InfiAgent @ 3d6c4a70, CC BY-NC, not vendored
@@ -55,6 +60,8 @@ uv run inspect eval src/da_verify/inspect_eval.py@da_verify -T condition=c3 --mo
 ---
 
 ## Status — W7: the powered run — verification works where instability lives
+
+> W7 is the powered **study** milestone (n=40 results in-repo).
 
 W6 ended with "a real signal, if one exists, needs k>1 diversity, run serially."
 W7 ran exactly that: C0 vs C2 (same-model verifier), 40 tasks × k=5 samples,
