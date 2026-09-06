@@ -1,5 +1,9 @@
 # Cost narrative (internal — no invented dollars)
 
+## 30-second interview answer
+I do not publish a fake dollar total. I compare **relative LLM work**: C3 uses 2–3 solver runs and a programmatic gate (no LLM judge), so it is usually cheaper than C2's solver+verifier pair while scoring higher on the powered run. If you need $, sum `cache/llm` usage × the provider rate card and date it — recipe below.
+
+
 Date: 2026-09-06
 Rule: Do not claim a dollar total unless computed from recorded usage times a stated price table.
 

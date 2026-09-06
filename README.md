@@ -151,6 +151,29 @@ See `data/disputes.md`: 2 malformed/degenerate gold answers (excluded), 81
 tasks with semantically-inconsistent categorical gold (de-prioritised in the
 headline subset), 1 duplicate-field task, 3 empty-gold tasks.
 
+
+## Cost (interview-ready)
+
+Published `results/*_summary.json` are **accuracy-only** — no dollar totals are invented.
+
+**Relative LLM work per task-sample** (what to say in interviews):
+
+| Condition | Relative work | Note |
+| --- | --- | --- |
+| C0 | ~1× solver | Baseline |
+| C1 | solver + same-model self-check | Null at temp 0 |
+| C2 | solver + independent verifier agent | More expensive |
+| C3 | 2–3× solver + programmatic agreement | **No LLM judge** — usually the cheaper *and* stronger aggregator |
+
+Full metering recipe (cache usage → price table): [`docs/COST.md`](docs/COST.md).
+
+
+## CI / supported runtimes (honest)
+
+- Declared: Python **≥ 3.11** (`pyproject.toml`).
+- GitHub Actions: **3.11 and 3.12** on `ubuntu-latest`; actions pinned by commit SHA.
+- We **do not** claim a multi-OS matrix. Local Mac study paths may differ from CI Linux.
+
 ## Tests & quality
 
 `python3 -m pytest tests/ -q` → **93 tests** (the Inspect adapter tests skip if
